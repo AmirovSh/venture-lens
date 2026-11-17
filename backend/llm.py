@@ -9,7 +9,7 @@ from sqlalchemy import update
 from . import settings,providers
 from .db import Session,Run,Invocation,dump,uid,emit
 from .transport import completion,TransportError
-from .execution import assert_owner,Cancelled,DependencyUnavailable
+from .execution import assert_owner,Cancelled,DependencyUnavailable,current,draining
 
 class LLMError(Exception):pass
 class BudgetExceeded(LLMError):pass
@@ -37,6 +37,7 @@ def invoke(run_id,role,packet,schema,instruction,model_id=None,max_tokens=12000)
     with Session() as session:limits=json.loads(session.get(Run,run_id).policy)['limits']
     choices=routes(role);last_error='';dependency=None
     for attempt in range(limits['retries']+1):
+        if current.get() and draining.is_set():raise DependencyUnavailable('Исполнитель завершает работу; этап продолжит другая реплика',2,False)
         route=choices[min(attempt,len(choices)-1)];name=providers.identity('llm',route['url']);invocation_id=None
         try:
             with providers.lane(name,limits['request_timeout_seconds'],int(settings.setting('LLM_MAX_CONCURRENCY','2')),int(settings.setting('LLM_REQUESTS_PER_MINUTE','30'))):

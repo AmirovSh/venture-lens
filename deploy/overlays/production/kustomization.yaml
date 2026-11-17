@@ -1,0 +1,24 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: venture-lens
+resources:
+- ../../base
+components:
+- ../../components/autoscaling
+- ../../components/backup
+configMapGenerator:
+- name: venture-lens-config
+  behavior: merge
+  literals:
+  - ALLOWED_ORIGINS=https://REPLACE_WITH_SERVICE_DOMAIN
+  - S3_PROVISION_BUCKET=false
+images:
+- name: venture-lens-api
+  newName: ghcr.io/REPLACE_OWNER/venture-lens-api
+  newTag: REPLACE_RELEASE_SHA
+- name: venture-lens-web
+  newName: ghcr.io/REPLACE_OWNER/venture-lens-web
+  newTag: REPLACE_RELEASE_SHA
+- name: venture-lens-backup
+  newName: ghcr.io/REPLACE_OWNER/venture-lens-backup
+  newTag: REPLACE_RELEASE_SHA

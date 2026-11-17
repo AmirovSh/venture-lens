@@ -1,0 +1,25 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: web}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: web}}
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  template:
+    metadata: {labels: {app: web}}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 20
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000}
+      containers:
+        - name: web
+          image: venture-lens-web:dev
+          ports: [{containerPort: 3100}]
+          env: [{name: NEXT_TELEMETRY_DISABLED, value: "1"}, {name: VENTURELENS_GITOPS_MARKER, value: declared}]
+          startupProbe: {httpGet: {path: /, port: 3100}, failureThreshold: 60, periodSeconds: 2}
+          livenessProbe: {httpGet: {path: /, port: 3100}, periodSeconds: 10, timeoutSeconds: 2}
+          readinessProbe: {httpGet: {path: /, port: 3100}, periodSeconds: 5, timeoutSeconds: 2}
+          resources: {requests: {cpu: 25m, memory: 64Mi}, limits: {cpu: "1", memory: 256Mi}}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+      topologySpreadConstraints:
+        - {maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {app: web}}}

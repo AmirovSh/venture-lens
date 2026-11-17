@@ -1,0 +1,8 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata: {name: venture-lens, namespace: argocd}
+spec:
+  description: Venture Lens application only
+  sourceRepos: [https://github.com/REPLACE_OWNER/REPLACE_REPOSITORY.git]
+  destinations: [{server: https://kubernetes.default.svc, namespace: venture-lens}]
+  clusterResourceWhitelist: [{group: "", kind: Namespace}]

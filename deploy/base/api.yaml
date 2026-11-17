@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: api}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: api}}
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  template:
+    metadata: {labels: {app: api}}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001}
+      initContainers:
+        - name: migrate
+          image: venture-lens-api:dev
+          command: [python, -m, backend.migrate]
+          envFrom: [{configMapRef: {name: venture-lens-config}}, {secretRef: {name: venture-lens-runtime}}]
+          resources: {requests: {cpu: 25m, memory: 96Mi}, limits: {cpu: "1", memory: 256Mi}}
+          securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+      containers:
+        - name: api
+          image: venture-lens-api:dev
+          ports: [{containerPort: 8100}]
+          envFrom: [{configMapRef: {name: venture-lens-config}}, {secretRef: {name: venture-lens-runtime}}]
+          startupProbe: {httpGet: {path: /api/live, port: 8100}, failureThreshold: 60, periodSeconds: 2}
+          livenessProbe: {httpGet: {path: /api/live, port: 8100}, periodSeconds: 10, timeoutSeconds: 2}
+          readinessProbe: {httpGet: {path: /api/ready, port: 8100}, periodSeconds: 5, timeoutSeconds: 3}
+          resources: {requests: {cpu: 50m, memory: 96Mi}, limits: {cpu: "1", memory: 256Mi}}
+          securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+          volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {sizeLimit: 128Mi}}]
+      topologySpreadConstraints:
+        - {maxSkew: 1, topologyKey: kubernetes.io/hostname, whenUnsatisfiable: ScheduleAnyway, labelSelector: {matchLabels: {app: api}}}

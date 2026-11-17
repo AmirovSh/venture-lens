@@ -1,0 +1,39 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: venture-lens-lab
+resources:
+- ../../base
+- infrastructure.yaml
+- bucket.yaml
+patches:
+- target:
+    kind: Namespace
+    name: venture-lens
+  patch: "- op: replace\n  path: /metadata/name\n  value: venture-lens-lab\n- op:\
+    \ add\n  path: /metadata/labels\n  value: {venturelens.dev/environment: local-disposable}"
+- target:
+    kind: Service
+    name: web
+  patch: "- op: add\n  path: /spec/type\n  value: NodePort\n- op: add\n  path: /spec/ports/0/nodePort\n\
+    \  value: 30310"
+configMapGenerator:
+- name: venture-lens-config
+  behavior: merge
+  literals:
+  - ALLOWED_ORIGINS=http://127.0.0.1:3210,http://localhost:3210
+  - JOB_LEASE_SECONDS=30
+  - S3_PROVISION_BUCKET=true
+images:
+- name: venture-lens-api
+  newName: venture-lens-api
+  newTag: lab-dacf6a995aedac11
+- name: venture-lens-web
+  newName: venture-lens-web
+  newTag: lab-dacf6a995aedac11
+replicas:
+- name: api
+  count: 1
+- name: worker
+  count: 1
+- name: web
+  count: 1

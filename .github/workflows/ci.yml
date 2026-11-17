@@ -1,0 +1,87 @@
+name: Verify and publish
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  checks:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: test
+          POSTGRES_PASSWORD: local-ci-only
+          POSTGRES_DB: test
+        ports: ['5432:5432']
+        options: --health-cmd "pg_isready -U test" --health-interval 5s --health-retries 20
+    env:
+      TEST_DATABASE_URL: postgresql+psycopg://test:local-ci-only@localhost:5432/test
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with: {python-version: '3.11'}
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with: {node-version: '22', cache: npm}
+      - run: pip install -r requirements.lock.txt
+      - run: python -m pytest -q
+      - run: python scripts/check_repository.py
+      - run: npm ci && npm run build
+      - run: |
+          python scripts/install_platform_tools.py
+          .tools/kubectl kustomize deploy/overlays/local > /tmp/local.yaml
+          .tools/kubectl kustomize deploy/overlays/production > /tmp/production.yaml
+  recovery:
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    env:
+      LAB_FIXTURE_PROVIDER: '1'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.11'}
+      - run: pip install -r requirements.lock.txt
+      - run: python scripts/install_platform_tools.py
+      - run: python platform/lab.py init
+      - run: python platform/lab.py build
+      - run: python platform/lab.py deploy
+      - run: python platform/fault_tests.py
+      - name: Diagnostics
+        if: always()
+        run: |
+          .tools/kubectl --kubeconfig .platform/kubeconfig --context k3d-venture-lens-lab get pods -A
+          test ! -f .platform/fault-report.json || cat .platform/fault-report.json
+  publish:
+    if: github.event_name == 'push' && github.event.repository.fork == false
+    needs: [checks, recovery]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - name: Publish immutable release
+        env:
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REGISTRY_USER: ${{ github.actor }}
+          OWNER: ${{ github.repository_owner }}
+          RELEASE_SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+          owner="${OWNER,,}"
+          for service in api web backup; do
+            docker build -f "Dockerfile.$service" -t "ghcr.io/$owner/venture-lens-$service:$RELEASE_SHA" .
+            docker push "ghcr.io/$owner/venture-lens-$service:$RELEASE_SHA"
+            docker inspect --format '{{index .RepoDigests 0}}' "ghcr.io/$owner/venture-lens-$service:$RELEASE_SHA" >> release-digests.txt
+          done
+          cat release-digests.txt >> "$GITHUB_STEP_SUMMARY"
+          docker logout ghcr.io

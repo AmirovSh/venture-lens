@@ -4,6 +4,8 @@ Set-Location -LiteralPath $projectPath
 if (-not (Test-Path -LiteralPath '.env.local')) { throw 'Создайте .env.local по образцу .env.example' }
 if (-not (Test-Path -LiteralPath '.next\standalone\server.js')) { throw 'Сначала выполните npm.cmd run build' }
 New-Item -ItemType Directory -Force -Path 'logs','data' | Out-Null
+& (Join-Path $projectPath '.venv\Scripts\python.exe') -m backend.migrate
+if ($LASTEXITCODE -ne 0) { throw 'Миграция базы данных не выполнена' }
 $services = @(
     @{ Name='api'; File=(Join-Path $projectPath '.venv\Scripts\python.exe'); Arguments=@('-m','uvicorn','backend.app:app','--host','127.0.0.1','--port','8100') },
     @{ Name='worker'; File=(Join-Path $projectPath '.venv\Scripts\python.exe'); Arguments=@('-m','backend.worker') },

@@ -1,4 +1,5 @@
-FROM node:22-alpine AS build
+ARG NODE_IMAGE=node:22-alpine
+FROM ${NODE_IMAGE} AS build
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -8,7 +9,7 @@ ENV API_INTERNAL_URL=http://api:8100
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_OPTIONS=--max-old-space-size=512
 RUN npm run build
-FROM node:22-alpine
+FROM ${NODE_IMAGE}
 WORKDIR /app
 ENV NODE_ENV=production PORT=3100 HOSTNAME=0.0.0.0
 COPY --from=build --chown=node:node /app/.next/standalone ./

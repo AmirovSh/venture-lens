@@ -14,6 +14,9 @@ from backend.settings import policy
 
 @pytest.fixture()
 def store(tmp_path,monkeypatch):
+    monkeypatch.setattr(llm.settings,'BASE_URL','https://gateway.example/v1')
+    monkeypatch.setattr(llm.settings,'API_KEY','TEST_ONLY_KEY')
+    monkeypatch.setattr(llm.settings,'FALLBACK_MODEL','')
     url=os.getenv('TEST_DATABASE_URL')
     schema='test_'+uuid.uuid4().hex
     engine=create_engine(url,connect_args={'options':f'-csearch_path={schema}'}) if url else create_engine(f'sqlite:///{tmp_path / "test.db"}',connect_args={'check_same_thread':False})

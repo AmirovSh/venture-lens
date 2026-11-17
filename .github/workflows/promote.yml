@@ -1,0 +1,39 @@
+name: Propose production release
+on:
+  workflow_dispatch:
+    inputs:
+      api_digest: {description: 'Verified API sha256 digest', required: true}
+      web_digest: {description: 'Verified Web sha256 digest', required: true}
+      backup_digest: {description: 'Verified Backup sha256 digest', required: true}
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  propose:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with: {python-version: '3.11'}
+      - run: pip install PyYAML==6.0.3
+      - name: Open release review
+        env:
+          API_DIGEST: ${{ inputs.api_digest }}
+          WEB_DIGEST: ${{ inputs.web_digest }}
+          BACKUP_DIGEST: ${{ inputs.backup_digest }}
+          OWNER: ${{ github.repository_owner }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_RUN: ${{ github.run_id }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          python scripts/promote_release.py --owner "$OWNER" --api-digest "$API_DIGEST" --web-digest "$WEB_DIGEST" --backup-digest "$BACKUP_DIGEST"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          branch="release/$RELEASE_RUN"
+          git checkout -b "$branch"
+          git add deploy/overlays/production/kustomization.yaml
+          git commit -m 'chore: propose immutable production images'
+          git push origin "$branch"
+          printf '%s\n' 'Updates production image digests. Review published CI results and environment configuration before merging. Argo CD applies the merged configuration; rollback uses a reviewed Git revert.' > /tmp/release-body.txt
+          gh pr create --title 'Promote verified container release' --body-file /tmp/release-body.txt --head "$branch"

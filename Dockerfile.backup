@@ -1,0 +1,6 @@
+ARG POSTGRES_IMAGE=postgres:17-alpine
+FROM ${POSTGRES_IMAGE}
+RUN apk add --no-cache python3 py3-boto3
+COPY platform/backup.py /opt/backup.py
+USER 10001
+ENTRYPOINT ["python3", "/opt/backup.py"]

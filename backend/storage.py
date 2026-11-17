@@ -33,6 +33,15 @@ def client():
 def bucket():return setting('S3_BUCKET','venture-lens')
 def enabled():return bool(setting('S3_ENDPOINT_URL'))
 
+@resilient
+def provision_local_bucket():
+    if setting('S3_PROVISION_BUCKET')!='true':raise RuntimeError('Bucket provisioning is restricted to the disposable local environment')
+    api=client()
+    try:api.head_bucket(Bucket=bucket())
+    except ClientError as error:
+        if error.response['Error']['Code'] not in ('404','NoSuchBucket'):raise
+        api.create_bucket(Bucket=bucket())
+
 def atomic(path,content):
     path.parent.mkdir(parents=True,exist_ok=True)
     temp=path.with_suffix('.'+str(time.time_ns())+'.tmp');temp.write_bytes(content);os.replace(temp,path)

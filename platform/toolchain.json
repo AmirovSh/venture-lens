@@ -1,0 +1,6 @@
+{
+  "k3d": "v5.9.0",
+  "k3s": "rancher/k3s:v1.37.2-k3s1",
+  "kubectl": "v1.37.2",
+  "argocd": "v3.6.1"
+}

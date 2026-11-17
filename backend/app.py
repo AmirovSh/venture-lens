@@ -131,7 +131,10 @@ def cancel(id:str):
 @app.post('/api/runs/{id}/retry')
 def retry(id:str):
     with Session.begin() as s:
-        r=get_run(s,id)
+        query=select(Run).where(Run.id==id)
+        if s.bind.dialect.name=='postgresql':query=query.with_for_update()
+        r=s.scalar(query)
+        if not r:raise HTTPException(404,'Исследование не найдено')
         if r.status not in ('partial','cancelled','waiting'):raise HTTPException(409,'Повтор доступен для остановленного или частично завершённого исследования')
         failed=s.scalars(select(Job).where(Job.run_id==id,Job.status.in_(['failed','cancelled','waiting']))).all()
         if not failed:raise HTTPException(409,'Нет этапов для повтора; дождитесь завершения текущего запроса')
