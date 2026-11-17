@@ -1,0 +1,23 @@
+version: "1.0"
+criteria:
+  - {id: legal_online, title: "Законно, онлайн, без собственной лицензии до первого клиента"}
+  - {id: recurring, title: "Подписка или комиссия с регулярных операций"}
+  - {id: no_financial_risk, title: "Без кредита, страхования и хранения клиентских денег"}
+  - {id: no_trading_government, title: "Не трейдинг и не государственный сервис"}
+  - {id: large_analogue, title: "Аналог масштаба от $300 млн"}
+weights:
+  acquisition: {title: "Доступ к покупателям", weight: 0.30}
+  payment: {title: "Первая оплата за 90 дней", weight: 0.25}
+  build: {title: "Скорость создания MVP", weight: 0.20}
+  budget: {title: "Доступность эксперимента", weight: 0.15}
+  dependencies: {title: "Независимость запуска", weight: 0.10}
+limits:
+  max_llm_calls: 90
+  max_total_tokens: 220000
+  max_requests_per_model: 5
+  max_sources_per_model: 6
+  max_critical_claims: 3
+  retries: 2
+  parallel_models: 2
+  request_timeout_seconds: 150
+  research_timeout_minutes: 45
