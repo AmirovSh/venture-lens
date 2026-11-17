@@ -1,0 +1,35 @@
+{
+  "run_id": "951d210c92f445c1",
+  "status": "completed",
+  "models": 10,
+  "counts": {
+    "passed": 0,
+    "rejected": 0,
+    "review": 10,
+    "error": 0,
+    "queued": 0,
+    "running": 0
+  },
+  "claims": 46,
+  "quoted_claims": 21,
+  "risk_checks": 30,
+  "check_results": {
+    "supported": 2,
+    "refuted": 1,
+    "partial": 7,
+    "unknown": 8,
+    "judgment": 12
+  },
+  "unique_sources": 62,
+  "full_pages": 31,
+  "verifier_calls": 17,
+  "critic_calls": 11,
+  "packet_hashes_valid": true,
+  "isolation_contract_valid": true,
+  "llm_models": [
+    "deepseek-v4-flash",
+    "qwen3.8-27b"
+  ],
+  "calls_including_retries": 54,
+  "tokens_including_reserve": 321765
+}
