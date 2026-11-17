@@ -136,6 +136,28 @@ def test_storage_detects_corruption_and_cache_is_disposable(tmp_path,monkeypatch
     (tmp_path/'cache/search/query.json').write_text('{broken')
     assert storage.get_cache('search','query') is None
 
+
+def test_object_store_network_failure_becomes_retryable_dependency(monkeypatch):
+    from botocore.exceptions import EndpointConnectionError
+    class Offline:
+        def get_object(self,**_):raise EndpointConnectionError(endpoint_url='http://test.invalid')
+    monkeypatch.setattr(storage,'enabled',lambda:True)
+    monkeypatch.setattr(storage,'client',lambda:Offline())
+    with pytest.raises(DependencyUnavailable,match='хранилище') as failure:storage.get_source('0'*64)
+    assert failure.value.retry_after>=1
+
+
+def test_draining_worker_defers_without_starting_another_llm_call(store,monkeypatch):
+    from backend.execution import draining
+    seed(store);claim=worker.claim_job('worker');token=current.set(claim)
+    monkeypatch.setattr(llm,'completion',lambda *_a,**_k:pytest.fail('A draining worker sent another paid call'))
+    draining.set()
+    try:
+        with pytest.raises(DependencyUnavailable) as failure:llm.invoke('run','discovery',{},Discovery,'Return JSON')
+        assert failure.value.count_attempt is False
+        with store() as s:assert s.query(db.Invocation).count()==0
+    finally:draining.clear();current.reset(token)
+
 def test_migration_adopts_legacy_database_without_losing_runs(tmp_path):
     from backend.migrate import upgrade
     engine=create_engine('sqlite:///'+str(tmp_path/'legacy.db'))

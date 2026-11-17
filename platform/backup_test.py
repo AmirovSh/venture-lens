@@ -35,7 +35,7 @@ for item in m['objects']:
     kube('-n',NAMESPACE,'exec','-i','statefulset/postgres','--','pg_restore','--exit-on-error','--no-owner','--no-privileges','-U','venturelens','-d',name,input=dump,capture_output=True)
     rows=kube('-n',NAMESPACE,'exec','statefulset/postgres','--','psql','-U','venturelens','-d',name,'-Atc',"SELECT count(*) FROM models WHERE decision='shortlist'",capture_output=True,text=True).stdout.strip()
     assert int(rows)>0
-    report={'passed':True,'backup_prefix':prefix,'restored_database':name,'shortlisted_models_restored':int(rows),'objects':result['objects'],'dump_sha256':hashlib.sha256(dump).hexdigest(),'backup_target':'local MinIO only; production must use a separate failure domain'}
+    report={'passed':True,'backup_prefix':prefix,'restored_database':name,'shortlisted_models_restored':int(rows),'objects':result['objects'],'dump_sha256':hashlib.sha256(dump).hexdigest(),'backup_target':'local S3 only; production must use a separate failure domain'}
     (STATE/'backup-report.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
 

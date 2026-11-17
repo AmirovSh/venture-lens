@@ -37,6 +37,7 @@ jobs:
           python scripts/install_platform_tools.py
           .tools/kubectl kustomize deploy/overlays/local > /tmp/local.yaml
           .tools/kubectl kustomize deploy/overlays/production > /tmp/production.yaml
+          if ! grep -q REPLACE_ /tmp/production.yaml; then python platform/preflight.py /tmp/production.yaml; fi
   recovery:
     needs: checks
     runs-on: ubuntu-24.04
@@ -64,6 +65,23 @@ jobs:
           git diff --cached --quiet || git commit -m 'test: resolve local images for GitOps verification'
       - run: python platform/lab.py gitops
       - run: python platform/gitops_test.py
+      - name: Export the tested images
+        if: github.event_name == 'push'
+        run: |
+          tag=$(python -c "import json; print(json.load(open('.platform/release.json'))['tag'])")
+          docker save -o release.tar "venture-lens-api:$tag" "venture-lens-web:$tag" venture-lens-backup:lab-v1
+          cp .platform/release.json release.json
+          sha256sum release.tar > release.tar.sha256
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: github.event_name == 'push'
+        with:
+          name: verified-images
+          path: |
+            release.tar
+            release.tar.sha256
+            release.json
+          retention-days: 1
+          compression-level: 0
       - name: Diagnostics
         if: always()
         run: |
@@ -78,6 +96,8 @@ jobs:
       packages: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with: {name: verified-images}
       - name: Publish immutable release
         env:
           REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -88,9 +108,14 @@ jobs:
         run: |
           set -euo pipefail
           printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io -u "$REGISTRY_USER" --password-stdin
+          sha256sum -c release.tar.sha256
+          docker load -i release.tar
+          tag=$(python3 -c "import json; print(json.load(open('release.json'))['tag'])")
           owner="${OWNER,,}"
           for service in api web backup; do
-            docker build -f "Dockerfile.$service" -t "ghcr.io/$owner/venture-lens-$service:$RELEASE_SHA" .
+            source_tag="$tag"
+            if [ "$service" = backup ]; then source_tag=lab-v1; fi
+            docker tag "venture-lens-$service:$source_tag" "ghcr.io/$owner/venture-lens-$service:$RELEASE_SHA"
             docker push "ghcr.io/$owner/venture-lens-$service:$RELEASE_SHA"
             docker inspect --format '{{index .RepoDigests 0}}' "ghcr.io/$owner/venture-lens-$service:$RELEASE_SHA" >> release-digests.txt
           done

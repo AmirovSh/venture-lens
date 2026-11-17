@@ -1,5 +1,6 @@
 """Destructive checks restricted to our disposable lab; never uses the default context."""
 import json
+import subprocess
 import time
 from pathlib import Path
 import urllib.request
@@ -50,7 +51,10 @@ def configure(values):
 def main():
     ns=json.loads(kube('get','namespace',NAMESPACE,'-o','json',capture_output=True,text=True).stdout)
     if ns['metadata']['labels'].get('venturelens.dev/environment')!='local-disposable':raise RuntimeError('Fault tests require the disposable lab label')
-    argo=kube('-n','argocd','get','application','venture-lens','--ignore-not-found','-o','json',capture_output=True,text=True).stdout
+    try:argo=kube('-n','argocd','get','application','venture-lens','--ignore-not-found','-o','json',capture_output=True,text=True).stdout
+    except subprocess.CalledProcessError as error:
+        if 'resource type' not in (error.stderr or '') and 'not found' not in (error.stderr or '').lower():raise
+        argo=''
     automated=json.loads(argo).get('spec',{}).get('syncPolicy',{}).get('automated') if argo.strip() else None
     if automated is not None:kube('-n','argocd','patch','application','venture-lens','--type=merge','-p',json.dumps({'spec':{'syncPolicy':{'automated':None}}}))
     original=private_values();tag=json.loads((STATE/'release.json').read_text())['tag']
@@ -91,6 +95,13 @@ def main():
         scale('statefulset','postgres',1);rollout('statefulset','postgres')
         wait('database recovery',lambda:state(run)['model']=='passed')
         passed('database_pvc_recovery_preserves_results')
+        scale('statefulset','source-store',0)
+        wait('object store stopped',lambda:not json.loads(kube('-n',NAMESPACE,'get','pods','-l','app=source-store','-o','json',capture_output=True,text=True).stdout)['items'])
+        unavailable=inside("from fastapi.testclient import TestClient;from backend.app import app;c=TestClient(app);print(str(c.get('/api/sources/"+checksum+"').status_code)+':'+str(c.get('/api/live').status_code))")
+        assert unavailable=='503:200',unavailable
+        scale('statefulset','source-store',1);rollout('statefulset','source-store')
+        assert inside("from backend.storage import get_source;print(len(get_source("+repr(checksum)+")))").isdigit()
+        passed('s3_outage_503_and_pvc_recovery')
         inside("from backend.db import Session,ProviderState;from backend.providers import identity\nwith Session.begin() as s:\n p=s.get(ProviderState,identity('llm','http://llm-fixture:8080/v1'));p.window_requests=0;p.blocked_until=0")
         scale('deployment','worker',2);rollout('deployment','worker');control(delay=1)
         concurrent=[seed('parallel '+str(i)) for i in range(3)]
@@ -101,6 +112,7 @@ def main():
         REPORT['passed']=True
     finally:
         scale('statefulset','postgres',1);rollout('statefulset','postgres')
+        scale('statefulset','source-store',1);rollout('statefulset','source-store')
         scale('deployment','worker',1)
         configure(original)
         control(delay=0,failures=0)

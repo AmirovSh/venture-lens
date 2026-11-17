@@ -1,0 +1,100 @@
+{
+  "verified_at": "2026-11-17T11:13:21.248216+00:00",
+  "scope": "local only; no remote Git publication or server deployment",
+  "release": {
+    "tag": "lab-c5e55b715c4e8432",
+    "source_fingerprint": "c5e55b715c4e8432"
+  },
+  "unit_tests": {
+    "postgresql_passed": 27,
+    "sqlite_passed": 26,
+    "sqlite_skipped": 1,
+    "skip_reason": "PostgreSQL-only SKIP LOCKED test"
+  },
+  "checks": {
+    "faults": {
+      "environment": "local-disposable",
+      "checks": [
+        {
+          "check": "full_cycle_and_persisted_score",
+          "passed": true,
+          "run_id": "c0091a761fa94f63",
+          "score": 80.0
+        },
+        {
+          "check": "api_recreated_database_and_s3_artifacts_preserved",
+          "passed": true
+        },
+        {
+          "check": "killed_worker_lease_takeover",
+          "passed": true,
+          "run_id": "ededc0d7ccb54c0b",
+          "epoch": 2
+        },
+        {
+          "check": "llm_outage_wait_and_automatic_recovery",
+          "passed": true,
+          "run_id": "ceaba797c1ef45fd"
+        },
+        {
+          "check": "database_outage_live_200_ready_503",
+          "passed": true
+        },
+        {
+          "check": "database_pvc_recovery_preserves_results",
+          "passed": true
+        },
+        {
+          "check": "s3_outage_503_and_pvc_recovery",
+          "passed": true
+        },
+        {
+          "check": "two_workers_claim_distinct_jobs",
+          "passed": true,
+          "runs": [
+            "fcb5319c00d443dc",
+            "66a8743b780b4943",
+            "0fee9ebd5dd446d6"
+          ]
+        }
+      ],
+      "passed": true
+    },
+    "backup_restore": {
+      "passed": true,
+      "backup_prefix": "snapshots/20261117T110438Z-5bd6df68/",
+      "restored_database": "restore_02140740a6b3",
+      "shortlisted_models_restored": 2,
+      "objects": 2,
+      "dump_sha256": "884e55599a016e4eb2ea14ddc5dd29ef7dde848864a2a20b05a08365155cbff8",
+      "backup_target": "local S3 (SeaweedFS); production requires a separate failure domain"
+    },
+    "autoscaling": {
+      "passed": true,
+      "keda": "v2.21.1",
+      "replicas_observed": [
+        1,
+        2,
+        1
+      ],
+      "probe": "isolated PostgreSQL queue metric; no paid LLM calls"
+    },
+    "gitops": {
+      "passed": true,
+      "sync": "Synced",
+      "health": "Healthy",
+      "self_heal": "manual Deployment drift restored from Git",
+      "revision": "revision-omitted"
+    }
+  },
+  "additional": {
+    "corporate_inference_from_final_pod": true,
+    "next_production_build": true,
+    "typescript": true,
+    "actionlint": "1.7.12: passed",
+    "production_preflight": "rejects placeholders; accepts digest-pinned configured fixture",
+    "browser": "card, score, evidence tab observed; synthetic data labelled",
+    "cloud_ci_executed": false,
+    "physical_high_availability_tested": false
+  }
+}
