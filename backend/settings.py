@@ -4,6 +4,7 @@ import yaml
 from dotenv import dotenv_values
 
 ROOT = Path(__file__).resolve().parent.parent
+DATA = Path(os.environ.get('DATA_DIR',str(ROOT/'data')))
 local = {**dotenv_values(ROOT / '.env.local'), **os.environ}
 external_path = local.get('CORPORATE_ENV_FILE', '')
 external = dotenv_values(external_path) if external_path and Path(external_path).is_file() else {}
@@ -12,7 +13,7 @@ env = {**external, **local}
 def setting(name, default=''):
     return env.get(name) or default
 
-DATABASE_URL = setting('DATABASE_URL', f'sqlite:///{(ROOT / "data/venture-lens.db").as_posix()}')
+DATABASE_URL = setting('DATABASE_URL', f'sqlite:///{(DATA / "venture-lens.db").as_posix()}')
 BASE_URL = setting('LLM_BASE_URL', setting('SEMANTIC_GRAPH_LLM_BASE_URL')).rstrip('/')
 API_KEY = setting('LLM_API_KEY', setting('OPENAI_API_KEY'))
 MODEL = setting('LLM_MODEL', 'deepseek-v4-flash')

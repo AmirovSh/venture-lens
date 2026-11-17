@@ -9,7 +9,10 @@ import xml.etree.ElementTree as ET
 from urllib.parse import urlparse, urljoin, parse_qs
 import httpx
 from bs4 import BeautifulSoup
+from botocore.exceptions import ClientError
 from .settings import setting, SEARCH_TRUST_ENV, ROOT
+from . import storage,providers
+from .execution import DependencyUnavailable,Cancelled
 
 class EvidenceError(Exception): pass
 
@@ -32,10 +35,8 @@ def cached_search(query,limit=5):
     words=[w.casefold() for w in re.findall(r'[a-zA-Z0-9]{3,}',query) if w.casefold() not in {'pricing','valuation','official','company','product','subscription','terms','the','and','for','with','that','this'}]
     if not words:return []
     found=[]
-    folder=ROOT/'data/cache'
-    for path in folder.glob('*.json'):
+    for record in storage.cached_pages():
         try:
-            record=json.loads(path.read_text(encoding='utf-8'))
             if time.time()-record['retrieved']>86400:continue
             haystack=(record['title']+' '+record['url']).casefold()
             score=sum(3 if w in haystack else 1 if w in record['text'].casefold() else 0 for w in words)
@@ -59,24 +60,18 @@ def financial_quote_matches(claim,amount):
     return any(abs(value-amount)<=max(1,amount*.01) for value in values)
 
 def source_record(url, title, text, published=None, origin='page', retrieved=None):
-    checksum = hashlib.sha256(text.encode()).hexdigest()
-    record = {'id':hashlib.sha256((url + checksum).encode()).hexdigest()[:16], 'url':url, 'title':title,
-              'text':text[:24000], 'published':published, 'retrieved':retrieved or time.time(), 'sha256':checksum, 'origin':origin}
-    folder = ROOT / 'data/sources'; folder.mkdir(parents=True, exist_ok=True)
-    (folder / f'{checksum}.txt').write_text(text, encoding='utf-8')
-    if origin=='page':
-        cache=ROOT/'data/cache';cache.mkdir(parents=True,exist_ok=True)
-        target=cache/(hashlib.sha256(url.encode()).hexdigest()+'.json')
-        temp=target.with_suffix('.'+str(time.time_ns())+'.tmp')
-        temp.write_text(json.dumps(record,ensure_ascii=False),encoding='utf-8');temp.replace(target)
+    checksum,uri=storage.put_source(text)
+    record={'id':hashlib.sha256((url+checksum).encode()).hexdigest()[:16],'url':url,'title':title,'text':text[:24000],'published':published,'retrieved':retrieved or time.time(),'sha256':checksum,'origin':origin,'storage_uri':uri}
+    if origin=='page':storage.put_cache('pages',hashlib.sha256(url.encode()).hexdigest(),record)
     return record
 
 def fetch(url):
     public_url(url)
-    cached=ROOT/'data/cache'/(hashlib.sha256(url.encode()).hexdigest()+'.json')
-    if cached.is_file():
-        value=json.loads(cached.read_text(encoding='utf-8'))
-        if time.time()-value['retrieved']<86400:return {**value,'cache_hit':True}
+    value=storage.get_cache('pages',hashlib.sha256(url.encode()).hexdigest())
+    if value and time.time()-value['retrieved']<86400:
+        try:
+            storage.get_source(value['sha256']);return {**value,'cache_hit':True}
+        except (storage.IntegrityError,OSError,ClientError):pass
     with httpx.Client(timeout=15, trust_env=SEARCH_TRUST_ENV, verify=ssl.create_default_context(), headers={'User-Agent':'VentureLensResearch/0.1 (+source-verification)'}) as c:
         for _ in range(5):
             public_url(url)
@@ -99,30 +94,37 @@ def fetch(url):
     raise EvidenceError('Слишком много перенаправлений')
 
 def search(query, limit=5):
-    search_cache=ROOT/'data/search-cache';search_cache.mkdir(parents=True,exist_ok=True)
-    cache_path=search_cache/(hashlib.sha256(query.encode()).hexdigest()+'.json')
-    if cache_path.is_file():
-        cached=json.loads(cache_path.read_text(encoding='utf-8'))
-        if time.time()-cached['retrieved']<86400:return cached['results'][:limit]
-    if setting('SEARXNG_URL'):
-        with httpx.Client(timeout=35,trust_env=False) as c:
-            r=c.get(setting('SEARXNG_URL').rstrip('/')+'/search',params={'q':query,'format':'json','language':'en','safesearch':0})
-            r.raise_for_status()
-            items=[]
-            for x in r.json().get('results',[])[:limit]:
-                if x.get('url','').startswith('http'):
-                    items.append(source_record(x['url'],x.get('title',x['url']),BeautifulSoup(x.get('content',''),'html.parser').get_text(' ',strip=True),origin='search_snippet'))
-            if items:
-                cache_path.write_text(json.dumps({'retrieved':time.time(),'results':items},ensure_ascii=False),encoding='utf-8')
-                return items
-            local=cached_search(query,limit)
-            if local:return local
-            raise EvidenceError('Поисковые движки временно ограничили запросы. Доступных сохранённых источников нет.')
-    if setting('EXA_API_KEY'):
-        with httpx.Client(timeout=35, trust_env=SEARCH_TRUST_ENV, verify=ssl.create_default_context()) as c:
-            r=c.post('https://api.exa.ai/search', headers={'x-api-key':setting('EXA_API_KEY')}, json={'query':query,'numResults':limit,'contents':{'text':{'maxCharacters':16000}}})
-            r.raise_for_status()
-            return [source_record(x['url'],x.get('title',x['url']),x.get('text',''),x.get('publishedDate'),origin='exa') for x in r.json().get('results',[]) if x.get('text')]
+    key=hashlib.sha256(query.encode()).hexdigest()
+    cached=storage.get_cache('search',key)
+    if cached and time.time()-cached['retrieved']<86400:return cached['results'][:limit]
+    errors=[]
+    configured=[]
+    if setting('SEARXNG_URL'):configured.append(('searxng',setting('SEARXNG_URL').rstrip('/')))
+    if setting('EXA_API_KEY'):configured.append(('exa','https://api.exa.ai'))
+    for kind,url in configured:
+        name=providers.identity('search',url)
+        try:
+            with providers.lane(name,35,concurrency=2,rpm=int(setting('SEARCH_REQUESTS_PER_MINUTE','20'))):
+                with httpx.Client(timeout=30,trust_env=False if kind=='searxng' else SEARCH_TRUST_ENV,verify=ssl.create_default_context()) as c:
+                    if kind=='searxng':
+                        response=c.get(url+'/search',params={'q':query,'format':'json','language':'en','safesearch':0});response.raise_for_status()
+                        results=[source_record(x['url'],x.get('title',x['url']),BeautifulSoup(x.get('content',''),'html.parser').get_text(' ',strip=True),origin='search_snippet') for x in response.json().get('results',[])[:limit] if x.get('url','').startswith('http')]
+                    else:
+                        response=c.post(url+'/search',headers={'x-api-key':setting('EXA_API_KEY')},json={'query':query,'numResults':limit,'contents':{'text':{'maxCharacters':16000}}});response.raise_for_status()
+                        results=[source_record(x['url'],x.get('title',x['url']),x.get('text',''),x.get('publishedDate'),origin='exa') for x in response.json().get('results',[]) if x.get('text')]
+                    if not results:raise EvidenceError('Поиск не вернул доказательств: внешние движки могут быть ограничены')
+                providers.success(name);storage.put_cache('search',key,{'retrieved':time.time(),'results':results});return results
+        except DependencyUnavailable as error:errors.append(error)
+        except (httpx.HTTPError,EvidenceError,ValueError) as error:
+            providers.failure(name,type(error).__name__,cooldown=60)
+            errors.append(DependencyUnavailable('Поиск временно недоступен; ожидаем резервный источник',60))
+    local=cached_search(query,limit)
+    if local:return local
+    if configured and setting('ALLOW_PUBLIC_SEARCH','false').lower()!='true':
+        raise errors[-1] if errors else DependencyUnavailable('Поиск недоступен',60)
+    return public_search(query,limit)
+
+def public_search(query,limit=5):
     with httpx.Client(timeout=25, trust_env=SEARCH_TRUST_ENV, verify=ssl.create_default_context(), follow_redirects=True) as c:
         # RSS is an open search result format; it still provides snippets, not full pages.
         r=c.get('https://www.bing.com/search',params={'q':query,'format':'rss','setlang':'en-us','cc':'us'})
@@ -167,6 +169,7 @@ def search(query, limit=5):
 
 def collect(queries, max_sources=6, on_error=None):
     results=[]
+    deferred=None
     for query in queries:
         try:
             found=search(query, 4)
@@ -182,7 +185,13 @@ def collect(queries, max_sources=6, on_error=None):
                 added+=1
                 if len(results)>=max_sources:return results
                 if added>=per_query:break
+        except Cancelled:raise
+        except DependencyUnavailable as error:
+            deferred=error
+            if on_error:on_error(str(error),query)
         except Exception as e:
             if on_error:on_error(str(e) if isinstance(e,EvidenceError) else 'Поиск временно недоступен; сохранённые источники будут использованы, если доступны',query)
-    if not results:raise EvidenceError('Не удалось получить источники. Повторите этап или настройте поисковый API.')
+    if not results:
+        if deferred:raise deferred
+        raise EvidenceError('Не удалось получить источники. Повторите этап или настройте поисковый API.')
     return results

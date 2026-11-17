@@ -1,0 +1,638 @@
+[
+  {
+    "name": "provider_slots",
+    "columns": [
+      {
+        "name": "id",
+        "type": "string",
+        "nullable": false,
+        "primary_key": true,
+        "default": null
+      },
+      {
+        "name": "provider",
+        "type": "string",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "holder",
+        "type": "string",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "expires",
+        "type": "float",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      }
+    ],
+    "foreign_keys": [],
+    "unique": [],
+    "indexes": [
+      {
+        "name": "ix_provider_slots_expires",
+        "columns": [
+          "expires"
+        ],
+        "unique": false
+      },
+      {
+        "name": "ix_provider_slots_provider",
+        "columns": [
+          "provider"
+        ],
+        "unique": false
+      }
+    ]
+  },
+  {
+    "name": "provider_state",
+    "columns": [
+      {
+        "name": "id",
+        "type": "string",
+        "nullable": false,
+        "primary_key": true,
+        "default": null
+      },
+      {
+        "name": "failures",
+        "type": "integer",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "blocked_until",
+        "type": "float",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "last_error",
+        "type": "string",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "updated",
+        "type": "float",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "window_started",
+        "type": "float",
+        "nullable": false,
+        "primary_key": false,
+        "default": "0"
+      },
+      {
+        "name": "window_requests",
+        "type": "integer",
+        "nullable": false,
+        "primary_key": false,
+        "default": "0"
+      }
+    ],
+    "foreign_keys": [],
+    "unique": [],
+    "indexes": []
+  },
+  {
+    "name": "runs",
+    "columns": [
+      {
+        "name": "id",
+        "type": "string",
+        "nullable": false,
+        "primary_key": true,
+        "default": null
+      },
+      {
+        "name": "title",
+        "type": "string",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "status",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "created",
+        "type": "float",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "updated",
+        "type": "float",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "settings",
+        "type": "text",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "policy",
+        "type": "text",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "calls",
+        "type": "integer",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "tokens",
+        "type": "integer",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "error",
+        "type": "text",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "generation",
+        "type": "integer",
+        "nullable": false,
+        "primary_key": false,
+        "default": "0"
+      },
+      {
+        "name": "active_seconds",
+        "type": "float",
+        "nullable": false,
+        "primary_key": false,
+        "default": "0"
+      },
+      {
+        "name": "waiting_reason",
+        "type": "text",
+        "nullable": false,
+        "primary_key": false,
+        "default": "''"
+      },
+      {
+        "name": "degraded",
+        "type": "integer",
+        "nullable": false,
+        "primary_key": false,
+        "default": "0"
+      }
+    ],
+    "foreign_keys": [],
+    "unique": [],
+    "indexes": [
+      {
+        "name": "ix_runs_status",
+        "columns": [
+          "status"
+        ],
+        "unique": false
+      }
+    ]
+  },
+  {
+    "name": "events",
+    "columns": [
+      {
+        "name": "id",
+        "type": "integer",
+        "nullable": false,
+        "primary_key": true,
+        "default": null
+      },
+      {
+        "name": "run_id",
+        "type": "string",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "model_id",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "at",
+        "type": "float",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "stage",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "message",
+        "type": "text",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "payload",
+        "type": "text",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      }
+    ],
+    "foreign_keys": [
+      {
+        "column": "run_id",
+        "target": "runs.id"
+      }
+    ],
+    "unique": [],
+    "indexes": [
+      {
+        "name": "ix_events_run_id",
+        "columns": [
+          "run_id"
+        ],
+        "unique": false
+      }
+    ]
+  },
+  {
+    "name": "invocations",
+    "columns": [
+      {
+        "name": "id",
+        "type": "string",
+        "nullable": false,
+        "primary_key": true,
+        "default": null
+      },
+      {
+        "name": "run_id",
+        "type": "string",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "model_id",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "role",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "model",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "provider",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "prompt_version",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "input_hash",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "input",
+        "type": "text",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "output",
+        "type": "text",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "tokens",
+        "type": "integer",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "status",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "created",
+        "type": "float",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      }
+    ],
+    "foreign_keys": [
+      {
+        "column": "run_id",
+        "target": "runs.id"
+      }
+    ],
+    "unique": [],
+    "indexes": [
+      {
+        "name": "ix_invocations_run_id",
+        "columns": [
+          "run_id"
+        ],
+        "unique": false
+      }
+    ]
+  },
+  {
+    "name": "models",
+    "columns": [
+      {
+        "name": "id",
+        "type": "string",
+        "nullable": false,
+        "primary_key": true,
+        "default": null
+      },
+      {
+        "name": "run_id",
+        "type": "string",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "name",
+        "type": "string",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "company",
+        "type": "string",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "status",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "stage",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "data",
+        "type": "text",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "score",
+        "type": "float",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "score_upper",
+        "type": "float",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "coverage",
+        "type": "float",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "decision",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "note",
+        "type": "text",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "error",
+        "type": "text",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      }
+    ],
+    "foreign_keys": [
+      {
+        "column": "run_id",
+        "target": "runs.id"
+      }
+    ],
+    "unique": [],
+    "indexes": [
+      {
+        "name": "ix_models_run_id",
+        "columns": [
+          "run_id"
+        ],
+        "unique": false
+      }
+    ]
+  },
+  {
+    "name": "jobs",
+    "columns": [
+      {
+        "name": "id",
+        "type": "string",
+        "nullable": false,
+        "primary_key": true,
+        "default": null
+      },
+      {
+        "name": "run_id",
+        "type": "string",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "model_id",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "key",
+        "type": "string",
+        "nullable": false,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "status",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "lease_owner",
+        "type": "string",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "lease_until",
+        "type": "float",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "attempts",
+        "type": "integer",
+        "nullable": true,
+        "primary_key": false,
+        "default": null
+      },
+      {
+        "name": "epoch",
+        "type": "integer",
+        "nullable": false,
+        "primary_key": false,
+        "default": "0"
+      },
+      {
+        "name": "next_retry_at",
+        "type": "float",
+        "nullable": false,
+        "primary_key": false,
+        "default": "0"
+      },
+      {
+        "name": "last_error",
+        "type": "text",
+        "nullable": false,
+        "primary_key": false,
+        "default": "''"
+      }
+    ],
+    "foreign_keys": [
+      {
+        "column": "model_id",
+        "target": "models.id"
+      },
+      {
+        "column": "run_id",
+        "target": "runs.id"
+      }
+    ],
+    "unique": [
+      [
+        "key"
+      ]
+    ],
+    "indexes": [
+      {
+        "name": "ix_jobs_next_retry_at",
+        "columns": [
+          "next_retry_at"
+        ],
+        "unique": false
+      },
+      {
+        "name": "ix_jobs_status",
+        "columns": [
+          "status"
+        ],
+        "unique": false
+      },
+      {
+        "name": "ix_jobs_lease_until",
+        "columns": [
+          "lease_until"
+        ],
+        "unique": false
+      }
+    ]
+  }
+]

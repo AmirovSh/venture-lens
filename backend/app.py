@@ -2,9 +2,11 @@ from contextlib import asynccontextmanager
 import time
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
-from sqlalchemy import select, update
+from sqlalchemy import select, update, text,func
+from sqlalchemy.exc import SQLAlchemyError
+from .execution import DependencyUnavailable
 from . import settings
-from .db import init, Session, Run, Model, Job, Event, Invocation, uid, dump, read
+from .db import init, Session, Run, Model, Job, Event, Invocation, ProviderState,uid, dump, read
 from .schemas import ResearchInput, Decision
 
 @asynccontextmanager
@@ -17,9 +19,12 @@ app=FastAPI(title='Venture Lens',version='0.1.0',lifespan=lifespan)
 async def local_guard(request:Request,call_next):
     # Local prototype: same-origin browser requests only; bind services to loopback.
     origin=request.headers.get('origin')
-    if request.method not in ('GET','HEAD','OPTIONS') and origin and origin not in ('http://127.0.0.1:3100','http://localhost:3100'):
+    allowed=settings.setting('ALLOWED_ORIGINS','http://127.0.0.1:3100,http://localhost:3100').split(',')
+    if request.method not in ('GET','HEAD','OPTIONS') and origin and origin not in allowed:
         return JSONResponse({'detail':'Недопустимый Origin'},status_code=403)
-    response=await call_next(request)
+    try:response=await call_next(request)
+    except SQLAlchemyError:return JSONResponse({'detail':'База данных временно недоступна','code':'DATABASE_UNAVAILABLE'},status_code=503,headers={'Retry-After':'3'})
+    except DependencyUnavailable:return JSONResponse({'detail':'Зависимость временно недоступна','code':'DEPENDENCY_UNAVAILABLE'},status_code=503,headers={'Retry-After':'30'})
     response.headers['X-Content-Type-Options']='nosniff'
     response.headers['Cache-Control']='no-store'
     return response
@@ -36,9 +41,10 @@ def serialize_model(m,detail=True):
 
 def serialize_run(s,r,detail=False):
     models=s.scalars(select(Model).where(Model.run_id==r.id)).all()
-    counts={k:sum(m.status==k for m in models) for k in ['passed','rejected','review','error','queued','running']}
+    counts={k:sum(m.status==k for m in models) for k in ['passed','rejected','review','error','queued','running','waiting','cancelled']}
     conf=read(r.settings)
     result={'id':r.id,'title':r.title,'status':r.status,'created':r.created,'updated':r.updated,'settings':{k:v for k,v in conf.items() if k!='discovery_sources'},'calls':r.calls,'tokens':r.tokens,'error':r.error,'counts':counts,'total':len(models),'done':sum(counts[k] for k in ['passed','rejected','review','error'])}
+    result.update(waiting_reason=r.waiting_reason,active_seconds=r.active_seconds,degraded=bool(r.degraded))
     if detail:
         result['models']=[serialize_model(m) for m in models];result['policy']=read(r.policy)
         result['discovery_sources']=conf.get('discovery_sources',[])
@@ -48,6 +54,36 @@ def serialize_run(s,r,detail=False):
 def health():
     return {'status':'ok','llm_configured':bool(settings.BASE_URL and settings.API_KEY),'llm_model':settings.MODEL,'database':'sqlite' if settings.DATABASE_URL.startswith('sqlite') else 'postgresql','search':'searxng' if settings.setting('SEARXNG_URL') else 'exa' if settings.setting('EXA_API_KEY') else 'public_search','policy':settings.policy()}
 
+@app.get('/api/live')
+def live():return {'status':'alive'}
+
+@app.get('/api/ready')
+def ready():
+    try:
+        with Session() as session:
+            session.execute(select(Run.generation,Run.active_seconds).limit(1));session.execute(select(Job.epoch).limit(1))
+        return {'status':'ready'}
+    except SQLAlchemyError:return JSONResponse({'status':'not_ready','reason':'DATABASE_OR_SCHEMA_UNAVAILABLE'},status_code=503)
+
+@app.get('/api/dependencies')
+def dependencies():
+    with Session() as session:return [{'id':p.id,'status':'waiting' if p.blocked_until>time.time() else 'available','retry_at':p.blocked_until,'reason':p.last_error} for p in session.scalars(select(ProviderState))]
+
+@app.get('/api/metrics')
+def metrics():
+    from fastapi.responses import PlainTextResponse
+    with Session() as session:
+        counts=session.execute(select(Job.status,func.count()).group_by(Job.status)).all()
+    return PlainTextResponse('\n'.join(f'venturelens_jobs{{status="{status}"}} {count}' for status,count in counts)+'\n')
+
+@app.get('/api/sources/{checksum}')
+def source_snapshot(checksum:str):
+    from fastapi.responses import PlainTextResponse
+    from .storage import get_source,IntegrityError
+    try:return PlainTextResponse(get_source(checksum))
+    except ValueError:raise HTTPException(400,'Некорректная контрольная сумма')
+    except (OSError,IntegrityError):raise HTTPException(503,'Снимок источника недоступен или повреждён')
+
 @app.get('/api/runs')
 def runs():
     with Session() as s:return [serialize_run(s,r) for r in s.scalars(select(Run).order_by(Run.created.desc()).limit(100))]
@@ -56,7 +92,7 @@ def runs():
 def create_run(body:ResearchInput):
     if not settings.BASE_URL or not settings.API_KEY:raise HTTPException(503,'Настройте подключение к корпоративному LLM')
     with Session.begin() as s:
-        if s.query(Run).filter(Run.status.in_(['queued','running'])).count()>=3:raise HTTPException(429,'Уже выполняются три исследования')
+        if s.query(Run).filter(Run.status.in_(['queued','running','waiting'])).count()>=int(settings.setting('MAX_ACTIVE_RESEARCH','10')):raise HTTPException(429,'Достигнут лимит одновременных исследований')
         r=Run(id=uid(),title=body.title,settings=dump(body.model_dump()),policy=dump(settings.policy()))
         s.add(r);s.flush();s.add(Job(run_id=r.id,key=f'discovery:{r.id}'))
         return {'id':r.id}
@@ -81,22 +117,27 @@ def audit(id:str):
 @app.post('/api/runs/{id}/cancel')
 def cancel(id:str):
     with Session.begin() as s:
-        r=get_run(s,id)
-        if r.status in ('queued','running'):
-            r.status='cancelled';r.updated=time.time()
-            s.execute(update(Job).where(Job.run_id==id,Job.status=='queued').values(status='cancelled'))
+        query=select(Run).where(Run.id==id)
+        if s.bind.dialect.name=='postgresql':query=query.with_for_update()
+        r=s.scalar(query)
+        if not r:raise HTTPException(404,'Исследование не найдено')
+        if r.status in ('queued','running','waiting'):
+            r.status='cancelled';r.updated=time.time();r.generation+=1
+            s.execute(update(Job).where(Job.run_id==id,Job.status.in_(['queued','running','waiting'])).values(status='cancelled',epoch=Job.epoch+1,lease_owner=None,lease_until=0))
+            s.execute(update(Model).where(Model.run_id==id,Model.status.in_(['queued','running','waiting'])).values(status='cancelled'))
+            s.execute(update(Invocation).where(Invocation.run_id==id,Invocation.status=='running').values(status='cancelled'))
     return {'status':'cancelled'}
 
 @app.post('/api/runs/{id}/retry')
 def retry(id:str):
     with Session.begin() as s:
         r=get_run(s,id)
-        if r.status not in ('partial','cancelled'):raise HTTPException(409,'Повтор доступен для остановленного или частично завершённого исследования')
-        failed=s.scalars(select(Job).where(Job.run_id==id,Job.status.in_(['failed','cancelled']))).all()
+        if r.status not in ('partial','cancelled','waiting'):raise HTTPException(409,'Повтор доступен для остановленного или частично завершённого исследования')
+        failed=s.scalars(select(Job).where(Job.run_id==id,Job.status.in_(['failed','cancelled','waiting']))).all()
         if not failed:raise HTTPException(409,'Нет этапов для повтора; дождитесь завершения текущего запроса')
-        r.status='queued';r.error='';r.updated=time.time()
+        r.status='queued';r.error='';r.updated=time.time();r.waiting_reason=''
         for j in failed:
-            j.status='queued';j.lease_until=0
+            j.status='queued';j.lease_until=0;j.lease_owner=None;j.epoch+=1;j.next_retry_at=0;j.attempts=0
             if j.model_id:
                 m=s.get(Model,j.model_id);m.status='queued';m.error=''
     return {'status':'queued'}

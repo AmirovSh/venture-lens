@@ -10,3 +10,7 @@ logs/
 *.tsbuildinfo
 playwright-report/
 test-results/
+.tools/
+.platform/
+.coverage
+htmlcov/

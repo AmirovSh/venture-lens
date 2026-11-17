@@ -4,19 +4,20 @@ from .db import Session, Run, Model, Job, Invocation, dump, read, emit, uid
 from .schemas import Discovery, Assessment, Critique, Verification, SearchPlan
 from .evidence import collect, fetch, grounded, normalize, financial_quote_matches
 from .llm import invoke, Cancelled
+from .execution import assert_owner,current,draining,DependencyUnavailable
 
 TERMINAL={'passed','rejected','review','error'}
 
 def guard(run_id):
-    with Session() as s:
-        r=s.get(Run,run_id)
-        if not r or r.status=='cancelled':raise Cancelled('Исследование остановлено')
-        if time.time()-r.created > read(r.policy)['limits']['research_timeout_minutes']*60:
-            raise RuntimeError('Превышен лимит времени исследования')
+    with Session.begin() as s:
+        r=assert_owner(s,run_id)
+        if r.active_seconds>=read(r.policy)['limits']['research_timeout_minutes']*60:
+            raise RuntimeError('Превышен бюджет активного выполнения исследования')
+    if current.get() is not None and draining.is_set():raise DependencyUnavailable('Исполнитель завершает работу; этап будет продолжен',1,False)
 
 def save_model(model_id,data,**values):
     with Session.begin() as s:
-        m=s.get(Model,model_id);m.data=dump(data)
+        m=s.get(Model,model_id);assert_owner(s,m.run_id);m.data=dump(data)
         for k,v in values.items():setattr(m,k,v)
 
 def source_errors(run_id,model_id=None):
@@ -57,6 +58,7 @@ def discover(run_id):
         sources=collect(['SaaS','B2B software'],max_sources=6,on_error=source_errors(run_id))
     with Session.begin() as s:
         # Preserve discovery provenance even when the provider fails.
+        assert_owner(s,run_id)
         r=s.get(Run,run_id); c=read(r.settings);c['discovery_sources']=sources;r.settings=dump(c)
     result=invoke(run_id,'discovery',{'market':market,'focus':config['focus'],'count':config['count'],'sources':context_sources(sources)},Discovery,
         'Извлеки указанное число РАЗЛИЧНЫХ бизнес-моделей из данных источников. Не дублируй одну модель под разными компаниями. '
@@ -70,6 +72,7 @@ def discover(run_id):
         seen.add(key);candidates.append(candidate)
     if not candidates:raise RuntimeError('Источники не дали проверяемых кандидатов')
     with Session.begin() as s:
+        assert_owner(s,run_id)
         for candidate in candidates[:config['count']]:
             m=Model(id=uid(),run_id=run_id,name=candidate['name'],company=candidate['company'],data=dump({'candidate':candidate,'discovery_source':next(x for x in sources if x['id']==candidate['discovery_source_id'])}))
             s.add(m);s.flush();s.add(Job(run_id=run_id,model_id=m.id,key=f'model:{m.id}'))
@@ -130,6 +133,7 @@ def process_model(model_id):
         emit(run_id,'dossier',f'Собираем досье: {candidate["company"]}',model_id)
         try:
             data['sources']=collect([candidate['company'], f'{candidate["company"]} pricing',f'{candidate["company"]} valuation'],pol['limits']['max_sources_per_model'],source_errors(run_id,model_id))
+        except (Cancelled,DependencyUnavailable):raise
         except Exception:
             if not data.get('discovery_source'):raise
             data['sources']=[data['discovery_source']]
@@ -187,6 +191,7 @@ def process_model(model_id):
                     'Пример: Company pricing implementation onboarding. Не используй длинные цитаты целиком и не доверяй тезису заранее.',model_id,max_tokens=1500)
                 data['verification_queries']=plan['queries'];save_model(model_id,data,stage='verification')
             try:verified_sources=collect(data['verification_queries'],pol['limits']['max_sources_per_model'],source_errors(run_id,model_id))
+            except (Cancelled,DependencyUnavailable):raise
             except Exception:emit(run_id,'source_warning','Независимый поиск недоступен; проверка помечается как неподтверждённая',model_id)
         data['verification_sources']=verified_sources
         result=invoke(run_id,'verifier',{'company':candidate['company'],'claims':claims,'sources':context_sources(verified_sources)},Verification,
@@ -234,9 +239,19 @@ def process_model(model_id):
 
 def finish_run(run_id):
     with Session.begin() as s:
-        r=s.get(Run,run_id)
+        from sqlalchemy import select
+        query=select(Run).where(Run.id==run_id)
+        if s.bind.dialect.name=='postgresql':query=query.with_for_update()
+        r=s.scalar(query)
         if not r or r.status=='cancelled':return
         jobs=s.query(Job).filter_by(run_id=run_id).all()
-        if not jobs or any(j.status in ('queued','running') for j in jobs):return
-        r.status='partial' if any(j.status=='failed' for j in jobs) else 'completed';r.updated=time.time()
-        if r.status=='completed':r.error=''
+        if not jobs:return
+        active={j.status for j in jobs}
+        if 'running' in active:r.status='running'
+        elif 'queued' in active:r.status='queued'
+        elif 'waiting' in active:r.status='waiting'
+        else:
+            r.status='partial' if 'failed' in active else 'completed_with_gaps' if r.degraded else 'completed'
+            r.waiting_reason=''
+            if r.status!='partial':r.error=''
+        r.updated=time.time()

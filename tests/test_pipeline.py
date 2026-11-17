@@ -114,10 +114,10 @@ def test_cancelled_run_does_not_resume(store):
 
 def test_job_lease_excludes_competing_worker_and_recovers_expired(store):
     seed(store)
-    assert worker.claim_job('a')==('job','run','model')
+    assert worker.claim_job('a').job_id=='job'
     assert worker.claim_job('b') is None
     with store.begin() as s:s.get(db.Job,'job').lease_until=time.time()-1
-    assert worker.claim_job('b')==('job','run','model')
+    assert worker.claim_job('b').epoch==2
 
 def test_retry_resumes_failed_job_and_export_reads_persisted_decision(store,monkeypatch):
     seed(store)
@@ -155,7 +155,7 @@ def test_llm_call_logs_schema_boundary_and_no_auth_material(store,monkeypatch):
     monkeypatch.setattr(llm.settings,'BASE_URL','https://gateway.example/v1')
     monkeypatch.setattr(llm.settings,'API_KEY','SECRET_TEST_KEY')
     seen=[]
-    def completion(payload,timeout):
+    def completion(payload,timeout,route=None):
         seen.append(payload)
         return {'choices':[{'message':{'content':'{"candidates":[]}'}}],'usage':{'total_tokens':100}}
     monkeypatch.setattr(llm,'completion',completion)

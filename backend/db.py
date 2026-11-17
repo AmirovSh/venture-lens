@@ -3,10 +3,10 @@ import time
 import uuid
 from sqlalchemy import create_engine, Column, String, Text, Integer, Float, ForeignKey, UniqueConstraint, event as sa_event
 from sqlalchemy.orm import declarative_base, sessionmaker
-from .settings import DATABASE_URL, ROOT
+from .settings import DATABASE_URL, ROOT, DATA
 
-(ROOT / 'data').mkdir(exist_ok=True)
-engine = create_engine(DATABASE_URL, connect_args={'check_same_thread': False, 'timeout': 30} if DATABASE_URL.startswith('sqlite') else {}, pool_pre_ping=True)
+DATA.mkdir(parents=True,exist_ok=True)
+engine = create_engine(DATABASE_URL, connect_args={'check_same_thread': False, 'timeout': 5} if DATABASE_URL.startswith('sqlite') else {'connect_timeout':5}, pool_pre_ping=True,pool_recycle=300)
 if DATABASE_URL.startswith('sqlite'):
     @sa_event.listens_for(engine, 'connect')
     def sqlite_options(connection, _):
@@ -31,6 +31,10 @@ class Run(Base):
     calls = Column(Integer, default=0)
     tokens = Column(Integer, default=0)
     error = Column(Text, default='')
+    generation = Column(Integer,default=0,server_default='0',nullable=False)
+    active_seconds = Column(Float,default=0,server_default='0',nullable=False)
+    waiting_reason = Column(Text,default='',server_default='',nullable=False)
+    degraded = Column(Integer,default=0,server_default='0',nullable=False)
 
 class Model(Base):
     __tablename__ = 'models'
@@ -58,6 +62,9 @@ class Job(Base):
     lease_owner = Column(String, nullable=True)
     lease_until = Column(Float, default=0, index=True)
     attempts = Column(Integer, default=0)
+    epoch = Column(Integer,default=0,server_default='0',nullable=False)
+    next_retry_at = Column(Float,default=0,server_default='0',nullable=False,index=True)
+    last_error = Column(Text,default='',server_default='',nullable=False)
 
 class Event(Base):
     __tablename__ = 'events'
@@ -76,6 +83,7 @@ class Invocation(Base):
     model_id = Column(String, nullable=True)
     role = Column(String)
     model = Column(String)
+    provider = Column(String,nullable=True)
     prompt_version = Column(String, default='1.1')
     input_hash = Column(String)
     input = Column(Text)
@@ -84,10 +92,32 @@ class Invocation(Base):
     status = Column(String, default='running')
     created = Column(Float, default=time.time)
 
-def init(): Base.metadata.create_all(engine)
+class ProviderState(Base):
+    __tablename__='provider_state'
+    id=Column(String,primary_key=True)
+    failures=Column(Integer,default=0,nullable=False)
+    blocked_until=Column(Float,default=0,nullable=False)
+    last_error=Column(String,default='',nullable=False)
+    updated=Column(Float,default=time.time,nullable=False)
+    window_started=Column(Float,default=0,server_default='0',nullable=False)
+    window_requests=Column(Integer,default=0,server_default='0',nullable=False)
+
+class ProviderSlot(Base):
+    __tablename__='provider_slots'
+    id=Column(String,primary_key=True)
+    provider=Column(String,index=True,nullable=False)
+    holder=Column(String,nullable=False)
+    expires=Column(Float,nullable=False,index=True)
+
+def init():
+    if DATABASE_URL.startswith('sqlite'):Base.metadata.create_all(engine)
 
 def emit(run_id, stage, message, model_id=None, payload=None):
     with Session.begin() as s:
+        from .execution import assert_owner
+        assert_owner(s,run_id)
         s.add(Event(run_id=run_id, model_id=model_id, stage=stage, message=message, payload=dump(payload or {})))
         r = s.get(Run, run_id)
-        if r: r.updated = time.time()
+        if r:
+            r.updated = time.time()
+            if stage=='source_warning':r.degraded=1
