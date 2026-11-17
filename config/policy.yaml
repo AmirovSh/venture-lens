@@ -1,4 +1,9 @@
-version: "1.0"
+version: "1.1"
+audit_review_models: true
+minimum_analogue_usd: 300000000
+discovery_urls:
+  - https://builtin.com/articles/top-b2b-saas-companies
+  - https://builtin.com/articles/saas-in-cloud-computing
 criteria:
   - {id: legal_online, title: "Законно, онлайн, без собственной лицензии до первого клиента"}
   - {id: recurring, title: "Подписка или комиссия с регулярных операций"}
@@ -11,9 +16,14 @@ weights:
   build: {title: "Скорость создания MVP", weight: 0.20}
   budget: {title: "Доступность эксперимента", weight: 0.15}
   dependencies: {title: "Независимость запуска", weight: 0.10}
+risk_penalties:
+  high: 15
+  medium: 8
+  low: 3
+  partial_multiplier: 0.5
 limits:
   max_llm_calls: 90
-  max_total_tokens: 220000
+  max_total_tokens: 500000
   max_requests_per_model: 5
   max_sources_per_model: 6
   max_critical_claims: 3

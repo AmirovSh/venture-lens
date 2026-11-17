@@ -76,7 +76,7 @@ class Invocation(Base):
     model_id = Column(String, nullable=True)
     role = Column(String)
     model = Column(String)
-    prompt_version = Column(String, default='1.0')
+    prompt_version = Column(String, default='1.1')
     input_hash = Column(String)
     input = Column(Text)
     output = Column(Text, nullable=True)

@@ -50,12 +50,19 @@ class Experiment(Strict):
     success: str
     stop: str
 
+class Benchmark(Strict):
+    company: str
+    metric: Literal['valuation', 'market_cap', 'acquisition_value', 'funding_raised', 'revenue', 'unknown']
+    amount_usd: float | None = Field(ge=0)
+    claim_id: str | None
+
 class Assessment(Strict):
     summary: str
     customer: str
     problem: str
     revenue: str
     analogue: str
+    benchmark: Benchmark
     first_sale: str
     gates: list[Gate]
     claims: list[Claim]
@@ -91,6 +98,9 @@ class Check(Strict):
 class Verification(Strict):
     checks: list[Check]
 
+class SearchPlan(Strict):
+    queries: list[str] = Field(min_length=1,max_length=3)
+
 class Decision(Strict):
-    decision: Literal['shortlist', 'defer', 'dismiss']
+    decision: Literal['shortlist', 'defer', 'dismiss'] | None
     note: str = Field(default='', max_length=2000)

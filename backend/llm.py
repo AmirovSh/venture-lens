@@ -21,13 +21,14 @@ SYSTEM = '''Ты аналитик бизнес-моделей. Отвечай п
 Расчёты объясняй с исходными значениями. Суждения и неизвестное маркируй честно.
 Оценка — экспертный индекс, не вероятность. Не выдавай юридических гарантий.'''
 
-def invoke(run_id, role, packet, schema, instruction, model_id=None, max_tokens=6500):
+def invoke(run_id, role, packet, schema, instruction, model_id=None, max_tokens=12000):
     if not settings.BASE_URL or not settings.API_KEY:
         raise LLMError('LLM не настроен: укажите CORPORATE_ENV_FILE или LLM_BASE_URL / LLM_API_KEY')
     with Session() as s:
         run=s.get(Run,run_id); policy=json.loads(run.policy)
     limits=policy['limits']; last_error=''
-    models=[settings.MODEL]+([settings.FALLBACK_MODEL] if settings.FALLBACK_MODEL else [])
+    primary=settings.setting('LLM_'+role.upper()+'_MODEL',settings.MODEL)
+    models=[primary]+([settings.FALLBACK_MODEL] if settings.FALLBACK_MODEL else [])
     for attempt in range(limits['retries']+1):
         selected=models[min(attempt,len(models)-1)]
         invocation_id=uid()
@@ -41,7 +42,7 @@ def invoke(run_id, role, packet, schema, instruction, model_id=None, max_tokens=
         try:
             body=completion({
                     'model':selected,'messages':[{'role':'system','content':SYSTEM+'\n'+instruction}, {'role':'user','content':content}],
-                    'temperature':0,'max_tokens':max_tokens,
+                    'temperature':0,'max_tokens':max_tokens,'thinking':{'type':'disabled'},'reasoning_effort':'low' if 'deepseek' in selected else 'none','chat_template_kwargs':{'enable_thinking':False},
                     'response_format':{'type':'json_schema','json_schema':{'name':role,'strict':True,'schema':schema.model_json_schema()}}
                 },limits['request_timeout_seconds'])
             raw=body['choices'][0]['message']['content']

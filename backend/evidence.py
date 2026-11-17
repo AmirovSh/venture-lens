@@ -1,4 +1,5 @@
 import hashlib
+import json
 import ipaddress
 import re
 import socket
@@ -26,10 +27,36 @@ def public_url(url):
 
 def normalize(text): return re.sub(r'\s+', ' ', text).strip()
 
+def cached_search(query,limit=5):
+    """Retrieve only previously fetched public documents, never agent conclusions."""
+    words=[w.casefold() for w in re.findall(r'[a-zA-Z0-9]{3,}',query) if w.casefold() not in {'pricing','valuation','official','company','product','subscription','terms','the','and','for','with','that','this'}]
+    if not words:return []
+    found=[]
+    folder=ROOT/'data/cache'
+    for path in folder.glob('*.json'):
+        try:
+            record=json.loads(path.read_text(encoding='utf-8'))
+            if time.time()-record['retrieved']>86400:continue
+            haystack=(record['title']+' '+record['url']).casefold()
+            score=sum(3 if w in haystack else 1 if w in record['text'].casefold() else 0 for w in words)
+            if score>=max(1,len(words)):
+                found.append((score,record))
+        except (ValueError,KeyError):continue
+    return [{**x,'cache_hit':True} for _,x in sorted(found,key=lambda x:x[0],reverse=True)[:limit]]
+
 def grounded(claim, sources):
     source = next((x for x in sources if x['id'] == claim.get('source_id')), None)
     quote = normalize(claim.get('quote') or '')
     return bool(source and len(quote) >= 15 and quote.casefold() in normalize(source.get('text', '')).casefold())
+
+def financial_quote_matches(claim,amount):
+    quote=(claim.get('quote') or '').casefold()
+    if not any(word in quote for word in ['valued','valuation','market cap','acquisition','acquired','deal','transaction','капитализац','оценк','сделк']):return False
+    values=[]
+    for match in re.finditer(r'(?:us\$|\$|usd)\s*(\d+(?:[.,]\d+)?)\s*(billion|million|bn|b\b|m\b|млрд|млн)',quote):
+        number=float(match.group(1).replace(',','.'))
+        values.append(number*(1e9 if match.group(2) in ('billion','bn','b','млрд') else 1e6))
+    return any(abs(value-amount)<=max(1,amount*.01) for value in values)
 
 def source_record(url, title, text, published=None, origin='page', retrieved=None):
     checksum = hashlib.sha256(text.encode()).hexdigest()
@@ -37,9 +64,19 @@ def source_record(url, title, text, published=None, origin='page', retrieved=Non
               'text':text[:24000], 'published':published, 'retrieved':retrieved or time.time(), 'sha256':checksum, 'origin':origin}
     folder = ROOT / 'data/sources'; folder.mkdir(parents=True, exist_ok=True)
     (folder / f'{checksum}.txt').write_text(text, encoding='utf-8')
+    if origin=='page':
+        cache=ROOT/'data/cache';cache.mkdir(parents=True,exist_ok=True)
+        target=cache/(hashlib.sha256(url.encode()).hexdigest()+'.json')
+        temp=target.with_suffix('.'+str(time.time_ns())+'.tmp')
+        temp.write_text(json.dumps(record,ensure_ascii=False),encoding='utf-8');temp.replace(target)
     return record
 
 def fetch(url):
+    public_url(url)
+    cached=ROOT/'data/cache'/(hashlib.sha256(url.encode()).hexdigest()+'.json')
+    if cached.is_file():
+        value=json.loads(cached.read_text(encoding='utf-8'))
+        if time.time()-value['retrieved']<86400:return {**value,'cache_hit':True}
     with httpx.Client(timeout=15, trust_env=SEARCH_TRUST_ENV, verify=ssl.create_default_context(), headers={'User-Agent':'VentureLensResearch/0.1 (+source-verification)'}) as c:
         for _ in range(5):
             public_url(url)
@@ -62,6 +99,25 @@ def fetch(url):
     raise EvidenceError('Слишком много перенаправлений')
 
 def search(query, limit=5):
+    search_cache=ROOT/'data/search-cache';search_cache.mkdir(parents=True,exist_ok=True)
+    cache_path=search_cache/(hashlib.sha256(query.encode()).hexdigest()+'.json')
+    if cache_path.is_file():
+        cached=json.loads(cache_path.read_text(encoding='utf-8'))
+        if time.time()-cached['retrieved']<86400:return cached['results'][:limit]
+    if setting('SEARXNG_URL'):
+        with httpx.Client(timeout=35,trust_env=False) as c:
+            r=c.get(setting('SEARXNG_URL').rstrip('/')+'/search',params={'q':query,'format':'json','language':'en','safesearch':0})
+            r.raise_for_status()
+            items=[]
+            for x in r.json().get('results',[])[:limit]:
+                if x.get('url','').startswith('http'):
+                    items.append(source_record(x['url'],x.get('title',x['url']),BeautifulSoup(x.get('content',''),'html.parser').get_text(' ',strip=True),origin='search_snippet'))
+            if items:
+                cache_path.write_text(json.dumps({'retrieved':time.time(),'results':items},ensure_ascii=False),encoding='utf-8')
+                return items
+            local=cached_search(query,limit)
+            if local:return local
+            raise EvidenceError('Поисковые движки временно ограничили запросы. Доступных сохранённых источников нет.')
     if setting('EXA_API_KEY'):
         with httpx.Client(timeout=35, trust_env=SEARCH_TRUST_ENV, verify=ssl.create_default_context()) as c:
             r=c.post('https://api.exa.ai/search', headers={'x-api-key':setting('EXA_API_KEY')}, json={'query':query,'numResults':limit,'contents':{'text':{'maxCharacters':16000}}})
@@ -127,6 +183,6 @@ def collect(queries, max_sources=6, on_error=None):
                 if len(results)>=max_sources:return results
                 if added>=per_query:break
         except Exception as e:
-            if on_error:on_error(type(e).__name__,query)
+            if on_error:on_error(str(e) if isinstance(e,EvidenceError) else 'Поиск временно недоступен; сохранённые источники будут использованы, если доступны',query)
     if not results:raise EvidenceError('Не удалось получить источники. Повторите этап или настройте поисковый API.')
     return results

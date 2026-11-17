@@ -46,7 +46,7 @@ def serialize_run(s,r,detail=False):
 
 @app.get('/api/health')
 def health():
-    return {'status':'ok','llm_configured':bool(settings.BASE_URL and settings.API_KEY),'llm_model':settings.MODEL,'database':'sqlite' if settings.DATABASE_URL.startswith('sqlite') else 'postgresql','search':'exa' if settings.setting('EXA_API_KEY') else 'public_search','policy':settings.policy()}
+    return {'status':'ok','llm_configured':bool(settings.BASE_URL and settings.API_KEY),'llm_model':settings.MODEL,'database':'sqlite' if settings.DATABASE_URL.startswith('sqlite') else 'postgresql','search':'searxng' if settings.setting('SEARXNG_URL') else 'exa' if settings.setting('EXA_API_KEY') else 'public_search','policy':settings.policy()}
 
 @app.get('/api/runs')
 def runs():

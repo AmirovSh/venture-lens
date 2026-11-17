@@ -11,7 +11,8 @@ def completion(payload,timeout):
     if setting('LLM_TRANSPORT')=='schannel':
         quote=lambda s:'"'+s.replace('\\','\\\\').replace('"','\\"').replace('\n','\\n').replace('\r','\\r')+'"'
         config='url = '+quote(BASE_URL+'/chat/completions')+'\nheader = '+quote('Authorization: Bearer '+API_KEY)+'\nheader = "Content-Type: application/json"\ndata = '+quote(json.dumps(payload,ensure_ascii=False))+'\n'
-        args=['curl.exe','-q','--config','-','--ssl-auto-client-cert','--noproxy','*','--silent','--show-error','--max-time',str(timeout),'--write-out','\n%{http_code}']
+        cert_args=['--cert',setting('LLM_CLIENT_CERT')] if setting('LLM_CLIENT_CERT') else ['--ssl-auto-client-cert']
+        args=['curl.exe','-q','--config','-',*cert_args,'--noproxy','*','--silent','--show-error','--max-time',str(timeout),'--write-out','\n%{http_code}']
         if setting('LLM_REVOCATION_BEST_EFFORT','false')=='true':args.append('--ssl-revoke-best-effort')
         result=subprocess.run(args,input=config.encode('utf-8'),capture_output=True,timeout=timeout+5)
         if result.returncode:raise TransportError(f'LLM transport: curl exit {result.returncode}')
