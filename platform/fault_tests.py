@@ -50,6 +50,9 @@ def configure(values):
 def main():
     ns=json.loads(kube('get','namespace',NAMESPACE,'-o','json',capture_output=True,text=True).stdout)
     if ns['metadata']['labels'].get('venturelens.dev/environment')!='local-disposable':raise RuntimeError('Fault tests require the disposable lab label')
+    argo=kube('-n','argocd','get','application','venture-lens','--ignore-not-found','-o','json',capture_output=True,text=True).stdout
+    automated=json.loads(argo).get('spec',{}).get('syncPolicy',{}).get('automated') if argo.strip() else None
+    if automated is not None:kube('-n','argocd','patch','application','venture-lens','--type=merge','-p',json.dumps({'spec':{'syncPolicy':{'automated':None}}}))
     original=private_values();tag=json.loads((STATE/'release.json').read_text())['tag']
     try:
         for item in resources(NAMESPACE,'venture-lens-api:'+tag):kube('apply','-f','-',input=json.dumps(item).encode(),capture_output=True)
@@ -102,6 +105,7 @@ def main():
         configure(original)
         control(delay=0,failures=0)
         scale('deployment','llm-fixture',0)
+        if automated is not None:kube('-n','argocd','patch','application','venture-lens','--type=merge','-p',json.dumps({'spec':{'syncPolicy':{'automated':automated}}}))
         (STATE/'fault-report.json').write_text(json.dumps(REPORT,indent=2)+'\n')
         print('Original lab provider configuration restored.',flush=True)
 

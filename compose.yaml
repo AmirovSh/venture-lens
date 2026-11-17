@@ -1,20 +1,25 @@
 services:
   db:
-    image: postgres:17-alpine
+    image: postgres:17.12-alpine
     environment:
       POSTGRES_DB: venturelens
       POSTGRES_USER: venturelens
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-    volumes: ["postgres:/var/lib/postgresql/data"]
+    volumes:
+    - postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U venturelens"]
+      test:
+      - CMD-SHELL
+      - pg_isready -U venturelens
       interval: 5s
       timeout: 3s
       retries: 10
     restart: unless-stopped
   api:
-    build: {context: ., dockerfile: Dockerfile.api}
-    environment: &backend_env
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    environment: &id001
       DATABASE_URL: postgresql+psycopg://venturelens:${POSTGRES_PASSWORD}@db/venturelens
       LLM_BASE_URL: ${LLM_BASE_URL:?Set LLM_BASE_URL}
       LLM_API_KEY: ${LLM_API_KEY:?Set LLM_API_KEY}
@@ -22,22 +27,83 @@ services:
       EXA_API_KEY: ${EXA_API_KEY:-}
       SEARXNG_URL: ${SEARXNG_URL:-}
       LLM_CRITIC_MODEL: ${LLM_CRITIC_MODEL:-deepseek-v4-flash}
-    volumes: ["sources:/app/data"]
-    depends_on: {db: {condition: service_healthy}}
-    ports: ["127.0.0.1:8100:8100"]
+    volumes:
+    - sources:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+    - 127.0.0.1:8100:8100
     restart: unless-stopped
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request;urllib.request.urlopen('http://127.0.0.1:8100/api/live',timeout=2)
+      interval: 10s
+      timeout: 3s
+      retries: 3
   worker:
-    build: {context: ., dockerfile: Dockerfile.api}
-    command: ["python", "-m", "backend.worker"]
-    environment: *backend_env
-    volumes: ["sources:/app/data"]
-    depends_on: {db: {condition: service_healthy}}
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command:
+    - python
+    - -m
+    - backend.worker
+    environment: *id001
+    volumes:
+    - sources:/app/data
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
+    healthcheck:
+      test:
+      - CMD
+      - python
+      - -c
+      - import urllib.request;urllib.request.urlopen('http://127.0.0.1:8091/live',timeout=2)
+      interval: 10s
+      timeout: 3s
+      retries: 3
   web:
-    build: {context: ., dockerfile: Dockerfile.web}
-    ports: ["127.0.0.1:3100:3100"]
-    depends_on: [api]
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+    - 127.0.0.1:3100:3100
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
     restart: unless-stopped
+    healthcheck:
+      test:
+      - CMD
+      - node
+      - -e
+      - require('http').get('http://127.0.0.1:3100/',r=>process.exit(r.statusCode===200?0:1)).on('error',()=>process.exit(1))
+      interval: 10s
+      timeout: 3s
+      retries: 3
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    command:
+    - python
+    - -m
+    - backend.migrate
+    environment: *id001
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: on-failure:3
 volumes:
-  postgres:
-  sources:
+  postgres: null
+  sources: null

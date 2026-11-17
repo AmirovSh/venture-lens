@@ -26,10 +26,10 @@ configMapGenerator:
 images:
 - name: venture-lens-api
   newName: venture-lens-api
-  newTag: lab-dacf6a995aedac11
+  newTag: lab-c5e55b715c4e8432
 - name: venture-lens-web
   newName: venture-lens-web
-  newTag: lab-dacf6a995aedac11
+  newTag: lab-c5e55b715c4e8432
 replicas:
 - name: api
   count: 1

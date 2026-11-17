@@ -7,6 +7,7 @@ import functools
 import inspect
 from pathlib import Path
 import boto3
+from botocore.config import Config
 from botocore.exceptions import ClientError
 from botocore.exceptions import BotoCoreError
 from .execution import DependencyUnavailable
@@ -28,7 +29,7 @@ def resilient(function):
     return invoke
 
 def client():
-    return boto3.client('s3',endpoint_url=setting('S3_ENDPOINT_URL') or None,region_name=setting('S3_REGION','us-east-1'),aws_access_key_id=setting('S3_ACCESS_KEY') or None,aws_secret_access_key=setting('S3_SECRET_KEY') or None)
+    return boto3.client('s3',config=Config(connect_timeout=5,read_timeout=15,retries={'max_attempts':2,'mode':'standard'}),endpoint_url=setting('S3_ENDPOINT_URL') or None,region_name=setting('S3_REGION','us-east-1'),aws_access_key_id=setting('S3_ACCESS_KEY') or None,aws_secret_access_key=setting('S3_SECRET_KEY') or None)
 
 def bucket():return setting('S3_BUCKET','venture-lens')
 def enabled():return bool(setting('S3_ENDPOINT_URL'))

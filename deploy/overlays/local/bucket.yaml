@@ -2,15 +2,31 @@ apiVersion: batch/v1
 kind: Job
 metadata:
   name: bucket-init
-  annotations: {argocd.argoproj.io/sync-wave: "-1"}
+  annotations:
+    argocd.argoproj.io/sync-wave: '-1'
+    argocd.argoproj.io/sync-options: Force=true,Replace=true
 spec:
   backoffLimit: 6
   template:
     spec:
       restartPolicy: OnFailure
       containers:
-        - name: init
-          image: venture-lens-api:dev
-          command: [python, -c, "from backend.storage import provision_local_bucket; provision_local_bucket(); print('Local bucket ready')"]
-          envFrom: [{configMapRef: {name: venture-lens-config}}, {secretRef: {name: venture-lens-runtime}}]
-          resources: {requests: {cpu: 25m, memory: 96Mi}, limits: {cpu: "1", memory: 192Mi}}
+      - name: init
+        image: venture-lens-api:dev
+        command:
+        - python
+        - -c
+        - from backend.storage import provision_local_bucket; provision_local_bucket();
+          print('Local bucket ready')
+        envFrom:
+        - configMapRef:
+            name: venture-lens-config
+        - secretRef:
+            name: venture-lens-runtime
+        resources:
+          requests:
+            cpu: 25m
+            memory: 96Mi
+          limits:
+            cpu: '1'
+            memory: 192Mi

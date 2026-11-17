@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import time
 import uuid
+from urllib.parse import urlsplit,unquote,parse_qs
 import boto3
 
 def client(prefix):
@@ -26,7 +27,11 @@ def main():
         dump=Path(directory)/'database.dump'
         url=os.environ['DATABASE_URL'].replace('postgresql+psycopg://','postgresql://')
         # libpq receives credentials in the environment, never process arguments.
-        subprocess.run(['pg_dump','--format=custom','--no-owner','--no-acl','--file',str(dump)],env={**os.environ,'PGDATABASE':url},check=True)
+        parsed=urlsplit(url)
+        pg={'PGHOST':parsed.hostname,'PGPORT':str(parsed.port or 5432),'PGUSER':unquote(parsed.username or ''),'PGPASSWORD':unquote(parsed.password or ''),'PGDATABASE':unquote(parsed.path.lstrip('/')),'PGCONNECT_TIMEOUT':'10'}
+        for key,value in parse_qs(parsed.query).items():
+            if key in ('sslmode','sslrootcert','sslcert','sslkey','connect_timeout'):pg['PG'+key.upper()]=value[-1]
+        subprocess.run(['pg_dump','--format=custom','--no-owner','--no-acl','--file',str(dump)],env={**os.environ,**pg},check=True)
         checksum=hashlib.file_digest(dump.open('rb'),'sha256').hexdigest()
         target.upload_file(str(dump),bucket,prefix+'database.dump',ExtraArgs={'Metadata':{'sha256':checksum}})
         entries.append({'key':'database.dump','sha256':checksum,'bytes':dump.stat().st_size})

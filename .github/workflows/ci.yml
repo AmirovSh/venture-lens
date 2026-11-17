@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:17.12-alpine
         env:
           POSTGRES_USER: test
           POSTGRES_PASSWORD: local-ci-only
@@ -40,7 +40,7 @@ jobs:
   recovery:
     needs: checks
     runs-on: ubuntu-24.04
-    timeout-minutes: 35
+    timeout-minutes: 50
     env:
       LAB_FIXTURE_PROVIDER: '1'
     steps:
@@ -53,6 +53,17 @@ jobs:
       - run: python platform/lab.py build
       - run: python platform/lab.py deploy
       - run: python platform/fault_tests.py
+      - run: docker build -f Dockerfile.backup -t venture-lens-backup:lab-v1 .
+      - run: python platform/backup_test.py
+      - run: python platform/scaling_test.py
+      - name: Commit only the ephemeral lab image references
+        run: |
+          git config user.name 'Local CI fixture'
+          git config user.email 'local-ci@example.invalid'
+          git add deploy/overlays/local/kustomization.yaml
+          git diff --cached --quiet || git commit -m 'test: resolve local images for GitOps verification'
+      - run: python platform/lab.py gitops
+      - run: python platform/gitops_test.py
       - name: Diagnostics
         if: always()
         run: |

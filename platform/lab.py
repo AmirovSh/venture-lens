@@ -33,7 +33,7 @@ def init():
     STATE.mkdir(exist_ok=True)
     listed=json.loads(run([K3D,'cluster','list','-o','json'],capture_output=True,text=True).stdout)
     if not any(x['name']==CLUSTER for x in listed):
-        run([K3D,'cluster','create',CLUSTER,'--image',LOCK['k3s'],'--servers','1','--agents','0','--servers-memory','1800m','--api-port','127.0.0.1:6551','--port','127.0.0.1:3210:30310@server:0','--port','127.0.0.1:3090:30390@server:0','--k3s-arg','--disable=traefik@server:*','--k3s-arg','--disable=servicelb@server:*','--kubeconfig-update-default=false','--kubeconfig-switch-context=false','--timeout','180s'])
+        run([K3D,'cluster','create',CLUSTER,'--image',LOCK['k3s'],'--servers','1','--agents','0','--servers-memory','2600m','--api-port','127.0.0.1:6551','--port','127.0.0.1:3210:30310@server:0','--port','127.0.0.1:3090:30390@server:0','--k3s-arg','--disable=traefik@server:*','--k3s-arg','--disable=servicelb@server:*','--kubeconfig-update-default=false','--kubeconfig-switch-context=false','--timeout','180s'])
     content=run([K3D,'kubeconfig','get',CLUSTER],capture_output=True).stdout
     Path(CONFIG).write_bytes(content)
     kube('get','nodes')
@@ -66,7 +66,7 @@ def private_values():
     path=STATE/'secrets.json'
     if path.is_file():return json.loads(path.read_text())
     password=secrets.token_hex(24);bridge=secrets.token_hex(32)
-    values={'POSTGRES_PASSWORD':password,'DATABASE_URL':f'postgresql+psycopg://venturelens:{password}@postgres:5432/venturelens','KEDA_DATABASE_URL':f'postgresql://venturelens:{password}@postgres:5432/venturelens','LLM_BASE_URL':'http://host.docker.internal:8112/v1','LLM_API_KEY':bridge,'SEARXNG_URL':'http://host.docker.internal:8088','S3_ENDPOINT_URL':'http://objectstore:9000','S3_ACCESS_KEY':'venturelens-local','S3_SECRET_KEY':secrets.token_hex(24)}
+    values={'POSTGRES_PASSWORD':password,'DATABASE_URL':f'postgresql+psycopg://venturelens:{password}@postgres:5432/venturelens','KEDA_DATABASE_URL':f'postgresql://venturelens:{password}@postgres.venture-lens-lab.svc.cluster.local:5432/venturelens','LLM_BASE_URL':'http://host.docker.internal:8112/v1','LLM_API_KEY':bridge,'SEARXNG_URL':'http://host.docker.internal:8088','S3_ENDPOINT_URL':'http://objectstore:9000','S3_ACCESS_KEY':'venturelens-local','S3_SECRET_KEY':secrets.token_hex(24)}
     if os.environ.get('LAB_FIXTURE_PROVIDER')=='1':values.update(LLM_BASE_URL='http://llm-fixture:8080/v1',LLM_API_KEY='synthetic-test-only',SEARXNG_URL='')
     path.write_text(json.dumps(values,indent=2))
     return values
@@ -96,11 +96,9 @@ def import_images(images):
 def deploy():
     start_bridge()
     values=private_values();release=json.loads((STATE/'release.json').read_text());tag=release['tag']
-    for image in ['postgres:17-alpine','quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e']:
-        if subprocess.run(['docker','image','inspect',image],capture_output=True).returncode:
-            if image.startswith('minio') and subprocess.run(['docker','image','inspect','minio/minio:latest'],capture_output=True).returncode==0:run(['docker','tag','minio/minio:latest',image])
-            else:run(['docker','pull',image])
-    import_images([f'venture-lens-api:{tag}',f'venture-lens-web:{tag}','postgres:17-alpine','quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e'])
+    for image in ['postgres:17.12-alpine','chrislusf/seaweedfs:4.54']:
+        if subprocess.run(['docker','image','inspect',image],capture_output=True).returncode:run(['docker','pull',image])
+    import_images([f'venture-lens-api:{tag}',f'venture-lens-web:{tag}','postgres:17.12-alpine','chrislusf/seaweedfs:4.54'])
     ns={'apiVersion':'v1','kind':'Namespace','metadata':{'name':NAMESPACE,'labels':{'venturelens.dev/environment':'local-disposable'}}}
     kube('apply','-f','-',input=json.dumps(ns).encode())
     secret={'apiVersion':'v1','kind':'Secret','metadata':{'name':'venture-lens-runtime','namespace':NAMESPACE},'type':'Opaque','stringData':values}
@@ -108,11 +106,17 @@ def deploy():
     if os.environ.get('LAB_FIXTURE_PROVIDER')=='1':
         from fixtures import resources
         for item in resources(NAMESPACE,'venture-lens-api:'+tag):kube('apply','-f','-',input=json.dumps(item).encode())
+    kube('-n',NAMESPACE,'delete','job','bucket-init','--ignore-not-found')
     kube('apply','-k','deploy/overlays/local')
-    for name in ['postgres','objectstore']:kube('-n',NAMESPACE,'rollout','status','statefulset/'+name,'--timeout=180s')
+    for name in ['postgres','source-store']:kube('-n',NAMESPACE,'rollout','status','statefulset/'+name,'--timeout=180s')
     kube('-n',NAMESPACE,'wait','--for=condition=complete','job/bucket-init','--timeout=180s')
     for name in ['api','worker','web']:kube('-n',NAMESPACE,'rollout','status','deployment/'+name,'--timeout=240s')
     print('Local Kubernetes application: http://127.0.0.1:3210')
+
+def sync_mirror():
+    mirror=STATE/'git/repo.git';mirror.parent.mkdir(parents=True,exist_ok=True)
+    if not mirror.exists():run(['git','init','--bare',str(mirror)])
+    run(['git','-C',str(mirror),'fetch',str(ROOT),'HEAD:refs/heads/lab']);run(['git','-C',str(mirror),'symbolic-ref','HEAD','refs/heads/lab'])
 
 def gitops():
     manifest=STATE/'argocd-install.yaml'
@@ -130,13 +134,12 @@ def gitops():
     kube('-n','argocd','patch','configmap','argocd-cmd-params-cm','--type=merge','-p',json.dumps({'data':{'server.insecure':'true','controller.status.processors':'5','controller.operation.processors':'2','reposerver.parallelism.limit':'1'}}))
     kube('-n','argocd','patch','service','argocd-server','--type=merge','-p',json.dumps({'spec':{'type':'NodePort','ports':[{'name':'http','port':80,'targetPort':8080,'nodePort':30390}]}}))
     for name in ['argocd-server','argocd-repo-server','argocd-redis']:kube('-n','argocd','rollout','status','deployment/'+name,'--timeout=240s')
-    mirror=STATE/'git/repo.git';mirror.parent.mkdir(parents=True,exist_ok=True)
-    if not mirror.exists():run(['git','init','--bare',str(mirror)])
-    run(['git','-C',str(mirror),'fetch',str(ROOT),'HEAD:refs/heads/lab']);run(['git','-C',str(mirror),'symbolic-ref','HEAD','refs/heads/lab']);run(['git','-C',str(mirror),'update-server-info'])
-    if subprocess.run(['docker','inspect','venture-lens-gitops'],capture_output=True).returncode:
-        run(['docker','run','-d','--name','venture-lens-gitops','--network','k3d-'+CLUSTER,'--read-only','--user','10001','--volume',str(mirror.parent)+':/srv:ro',f'venture-lens-api:{json.loads((STATE/"release.json").read_text())["tag"]}','python','-m','http.server','8080','--directory','/srv'])
+    sync_mirror();mirror=STATE/'git/repo.git'
+    run(['docker','build','-f','Dockerfile.git','-t','venture-lens-gitops:lab-v1','.'])
+    if subprocess.run(['docker','inspect','venture-lens-gitops'],capture_output=True).returncode==0:run(['docker','rm','-f','venture-lens-gitops'])
+    run(['docker','run','-d','--name','venture-lens-gitops','--network','k3d-'+CLUSTER,'--read-only','--user','10001','--volume',str(mirror.parent)+':/srv:ro','venture-lens-gitops:lab-v1'])
     ip=run(['docker','inspect','venture-lens-gitops','--format','{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'],capture_output=True,text=True).stdout.strip()
-    repo='http://'+ip+':8080/repo.git'
+    repo='git://'+ip+':9418/repo.git'
     project={'apiVersion':'argoproj.io/v1alpha1','kind':'AppProject','metadata':{'name':'venture-lens','namespace':'argocd'},'spec':{'sourceRepos':[repo],'destinations':[{'server':'https://kubernetes.default.svc','namespace':NAMESPACE}],'clusterResourceWhitelist':[{'group':'','kind':'Namespace'}]}}
     application={'apiVersion':'argoproj.io/v1alpha1','kind':'Application','metadata':{'name':'venture-lens','namespace':'argocd'},'spec':{'project':'venture-lens','source':{'repoURL':repo,'targetRevision':'lab','path':'deploy/overlays/local'},'destination':{'server':'https://kubernetes.default.svc','namespace':NAMESPACE},'syncPolicy':{'automated':{'selfHeal':True,'prune':True},'syncOptions':['RespectIgnoreDifferences=true','PruneLast=true']},'ignoreDifferences':[{'group':'apps','kind':'Deployment','name':name,'jsonPointers':['/spec/replicas']} for name in ['api','worker']]}}
     for item in [project,application]:kube('apply','-f','-',input=json.dumps(item).encode())
@@ -146,11 +149,12 @@ def gitops():
     print('Argo CD: http://127.0.0.1:3090 (credentials saved privately in .platform/argocd-admin.txt)')
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('action',choices=['init','build','deploy','gitops','status']);args=parser.parse_args()
+    parser=argparse.ArgumentParser();parser.add_argument('action',choices=['init','build','deploy','gitops','sync','status']);args=parser.parse_args()
     if args.action=='init':init()
     elif args.action=='build':build()
     elif args.action=='deploy':deploy()
     elif args.action=='gitops':gitops()
+    elif args.action=='sync':sync_mirror();kube('-n','argocd','annotate','application','venture-lens','argocd.argoproj.io/refresh=hard','--overwrite')
     else:kube('get','pods','-A')
 
 if __name__=='__main__':main()

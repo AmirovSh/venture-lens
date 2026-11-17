@@ -8,3 +8,10 @@ logs
 __pycache__
 .pytest_cache
 tests
+
+.tools
+.platform
+*.pem
+*.key
+*.pfx
+*.p12

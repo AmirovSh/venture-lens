@@ -1,0 +1,6 @@
+# Local-only read-only Git transport for Argo CD; no host port is published.
+FROM postgres:17.12-alpine
+RUN apk add --no-cache git-daemon
+RUN adduser -D -u 10001 app
+USER 10001
+ENTRYPOINT ["git", "-c", "safe.directory=*", "daemon", "--reuseaddr", "--base-path=/srv", "--export-all", "--verbose", "--listen=0.0.0.0", "--port=9418", "/srv"]

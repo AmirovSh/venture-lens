@@ -1,67 +1,185 @@
-# Disposable local infrastructure. Production uses independently operated PostgreSQL and S3.
 apiVersion: v1
 kind: Service
-metadata: {name: postgres, annotations: {argocd.argoproj.io/sync-wave: "-2"}}
+metadata:
+  name: postgres
+  annotations:
+    argocd.argoproj.io/sync-wave: '-2'
 spec:
-  selector: {app: postgres}
-  ports: [{port: 5432, targetPort: 5432}]
+  selector:
+    app: postgres
+  ports:
+  - port: 5432
+    targetPort: 5432
 ---
 apiVersion: apps/v1
 kind: StatefulSet
-metadata: {name: postgres, annotations: {argocd.argoproj.io/sync-wave: "-2"}}
+metadata:
+  name: postgres
+  annotations:
+    argocd.argoproj.io/sync-wave: '-2'
 spec:
   serviceName: postgres
   replicas: 1
-  selector: {matchLabels: {app: postgres}}
+  selector:
+    matchLabels:
+      app: postgres
   template:
-    metadata: {labels: {app: postgres}}
+    metadata:
+      labels:
+        app: postgres
     spec:
       containers:
-        - name: postgres
-          image: postgres:17-alpine
-          env:
-            - {name: POSTGRES_DB, value: venturelens}
-            - {name: POSTGRES_USER, value: venturelens}
-            - {name: POSTGRES_PASSWORD, valueFrom: {secretKeyRef: {name: venture-lens-runtime, key: POSTGRES_PASSWORD}}}
-            - {name: PGDATA, value: /var/lib/postgresql/data/pgdata}
-          ports: [{containerPort: 5432}]
-          readinessProbe: {exec: {command: [pg_isready, -U, venturelens]}, periodSeconds: 3}
-          livenessProbe: {exec: {command: [pg_isready, -U, venturelens]}, initialDelaySeconds: 30, periodSeconds: 10}
-          resources: {requests: {cpu: 50m, memory: 128Mi}, limits: {cpu: "1", memory: 384Mi}}
-          volumeMounts: [{name: data, mountPath: /var/lib/postgresql/data}]
+      - name: postgres
+        image: postgres:17.12-alpine
+        env:
+        - name: POSTGRES_DB
+          value: venturelens
+        - name: POSTGRES_USER
+          value: venturelens
+        - name: POSTGRES_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: venture-lens-runtime
+              key: POSTGRES_PASSWORD
+        - name: PGDATA
+          value: /var/lib/postgresql/data/pgdata
+        ports:
+        - containerPort: 5432
+        readinessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - venturelens
+          periodSeconds: 3
+        livenessProbe:
+          exec:
+            command:
+            - pg_isready
+            - -U
+            - venturelens
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 50m
+            memory: 128Mi
+          limits:
+            cpu: '1'
+            memory: 384Mi
+        volumeMounts:
+        - name: data
+          mountPath: /var/lib/postgresql/data
   volumeClaimTemplates:
-    - metadata: {name: data, annotations: {argocd.argoproj.io/sync-options: Prune=false}}
-      spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 2Gi}}}
+  - metadata:
+      name: data
+      annotations:
+        argocd.argoproj.io/sync-options: Prune=false
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 2Gi
 ---
 apiVersion: v1
 kind: Service
-metadata: {name: objectstore, annotations: {argocd.argoproj.io/sync-wave: "-2"}}
+metadata:
+  name: objectstore
+  annotations:
+    argocd.argoproj.io/sync-wave: '-2'
 spec:
-  selector: {app: objectstore}
-  ports: [{port: 9000, targetPort: 9000}]
+  selector:
+    app: source-store
+  ports:
+  - port: 9000
+    targetPort: 9000
 ---
 apiVersion: apps/v1
 kind: StatefulSet
-metadata: {name: objectstore, annotations: {argocd.argoproj.io/sync-wave: "-2"}}
+metadata:
+  name: source-store
+  annotations:
+    argocd.argoproj.io/sync-wave: '-2'
 spec:
-  serviceName: objectstore
+  serviceName: source-store
   replicas: 1
-  selector: {matchLabels: {app: objectstore}}
+  selector:
+    matchLabels:
+      app: source-store
   template:
-    metadata: {labels: {app: objectstore}}
+    metadata:
+      labels:
+        app: source-store
     spec:
       containers:
-        - name: minio
-          image: quay.io/minio/minio@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
-          args: [server, /data, --console-address, ":9001"]
-          env:
-            - {name: MINIO_ROOT_USER, valueFrom: {secretKeyRef: {name: venture-lens-runtime, key: S3_ACCESS_KEY}}}
-            - {name: MINIO_ROOT_PASSWORD, valueFrom: {secretKeyRef: {name: venture-lens-runtime, key: S3_SECRET_KEY}}}
-          ports: [{containerPort: 9000}]
-          readinessProbe: {httpGet: {path: /minio/health/ready, port: 9000}, periodSeconds: 5}
-          livenessProbe: {httpGet: {path: /minio/health/live, port: 9000}, initialDelaySeconds: 20, periodSeconds: 10}
-          resources: {requests: {cpu: 25m, memory: 96Mi}, limits: {cpu: "1", memory: 256Mi}}
-          volumeMounts: [{name: data, mountPath: /data}]
+      - name: s3
+        image: chrislusf/seaweedfs:4.54
+        args:
+        - mini
+        - -dir=/data
+        - -s3.port=9000
+        - -ip.bind=0.0.0.0
+        - -master.telemetry=false
+        - -admin.ui=false
+        - -webdav=false
+        env:
+        - name: AWS_ACCESS_KEY_ID
+          valueFrom:
+            secretKeyRef:
+              name: venture-lens-runtime
+              key: S3_ACCESS_KEY
+        - name: AWS_SECRET_ACCESS_KEY
+          valueFrom:
+            secretKeyRef:
+              name: venture-lens-runtime
+              key: S3_SECRET_KEY
+        ports:
+        - containerPort: 9000
+        readinessProbe:
+          tcpSocket:
+            port: 9000
+          periodSeconds: 5
+        livenessProbe:
+          tcpSocket:
+            port: 9000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        resources:
+          requests:
+            cpu: 25m
+            memory: 96Mi
+          limits:
+            cpu: '1'
+            memory: 320Mi
+        volumeMounts:
+        - name: data
+          mountPath: /data
+      securityContext:
+        runAsUser: 10001
+        runAsNonRoot: true
+        fsGroup: 10001
   volumeClaimTemplates:
-    - metadata: {name: data, annotations: {argocd.argoproj.io/sync-options: Prune=false}}
-      spec: {accessModes: [ReadWriteOnce], resources: {requests: {storage: 2Gi}}}
+  - metadata:
+      name: data
+      annotations:
+        argocd.argoproj.io/sync-options: Prune=false
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 2Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: source-store
+  annotations:
+    argocd.argoproj.io/sync-wave: '-2'
+spec:
+  selector:
+    app: source-store
+  ports:
+  - port: 9000
+    targetPort: 9000
