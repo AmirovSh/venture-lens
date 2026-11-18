@@ -33,6 +33,9 @@ https://91.108.213.165 {
 		max_size 1MB
 	}
 	reverse_proxy demo-access:8090 {
+		lb_try_duration 5s
+		lb_try_interval 250ms
+		lb_retry_match method GET HEAD OPTIONS
 		header_up X-Forwarded-For {remote_host}
 		header_up X-Forwarded-Proto https
 		header_up X-Forwarded-Host 91.108.213.165
