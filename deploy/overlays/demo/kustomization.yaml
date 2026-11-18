@@ -29,7 +29,7 @@ configMapGenerator:
 images:
 - name: venture-lens-api
   newName: venture-lens-api
-  newTag: decision-revision-omitted
+  newTag: product-revision-omitted
 - name: venture-lens-web
   newName: venture-lens-web
   newTag: ux-revision-omitted
