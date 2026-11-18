@@ -110,6 +110,27 @@ class ProviderSlot(Base):
     holder=Column(String,nullable=False)
     expires=Column(Float,nullable=False,index=True)
 
+
+class EvidenceAction(Base):
+    __tablename__='evidence_actions'
+    model_id=Column(String,ForeignKey('models.id'),primary_key=True)
+    task_key=Column(String(80),primary_key=True)
+    status=Column(String(16),nullable=False,default='open')
+    owner=Column(String(120),nullable=False,default='')
+    note=Column(Text,nullable=False,default='')
+    source_urls=Column(Text,nullable=False,default='[]')
+    version=Column(Integer,nullable=False,default=1)
+    updated=Column(Float,nullable=False,default=time.time)
+
+
+class Pilot(Base):
+    __tablename__='pilots'
+    model_id=Column(String,ForeignKey('models.id'),primary_key=True)
+    data=Column(Text,nullable=False,default='{}')
+    version=Column(Integer,nullable=False,default=1)
+    created=Column(Float,nullable=False,default=time.time)
+    updated=Column(Float,nullable=False,default=time.time)
+
 def init():
     if DATABASE_URL.startswith('sqlite'):Base.metadata.create_all(engine)
 

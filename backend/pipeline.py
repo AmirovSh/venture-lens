@@ -68,6 +68,8 @@ def discover(run_id):
     result=invoke(run_id,'discovery',{'market':market,'focus':config['focus'],'count':config['count'],'sources':context_sources(sources)},Discovery,
         'Извлеки указанное число РАЗЛИЧНЫХ бизнес-моделей из данных источников. Не дублируй одну модель под разными компаниями. '
         'discovery_source_id обязан существовать в источниках. query — поисковый запрос на английском для проверки компании, продукта и оценки. '
+        'name и description описывают НАШУ гипотезу продукта, покупателя и повторяемой выручки; company — только компания-аналог. '
+        'business_model_key — короткий английский ключ вида customer-product-revenue, одинаковый для смысловых дублей. '
         'Не требуется, чтобы все модели прошли фильтры; допускаются кандидаты для обоснованного отклонения. Не выдумывай недостающих кандидатов.',max_tokens=12000)
     guard(run_id)
     valid_ids={x['id'] for x in sources};seen=set();candidates=[]
@@ -143,6 +145,11 @@ def process_model(model_id):
             if not data.get('discovery_source'):raise
             data['sources']=[data['discovery_source']]
             emit(run_id,'source_warning','Поиск недоступен: предварительная карточка ограничена исходным каталогом. Пробелы не заполняются фактами из памяти.',model_id)
+        for url in data.get('additional_source_urls',[])[:10]:
+            if any(source['url']==url for source in data['sources']):continue
+            try:data['sources'].append(fetch(url))
+            except (Cancelled,DependencyUnavailable):raise
+            except Exception:source_errors(run_id,model_id)('Добавленный материал недоступен или заблокирован проверкой URL',url)
         save_model(model_id,data,stage='screening')
     guard(run_id)
     if 'assessment' not in data:
@@ -157,7 +164,11 @@ def process_model(model_id):
             'benchmark: отдельный тип метрики и сумма в USD, ссылка claim_id на паспорт доказательства. funding_raised/revenue НЕ valuation. '
             'Условие крупного аналога — подтверждённая оценка/капитализация/сделка порядка $300м и выше с датой. '
             'Оценки скорости и продаж — суждения с явными предпосылками; не придумывай CAC, сроки и покупателей. '
-            'Каждому существенному утверждению карточки дай паспорт в claims. experiment: 3 этапа 1–14, 15–30, 31–90 дней с success и stop.',model_id)
+            'Каждому существенному утверждению карточки дай паспорт в claims. experiment: 3 этапа 1–14, 15–30, 31–90 дней с success и stop. '
+            'Заполни launch_brief: НАШ продукт, первый покупатель, доступный канал привлечения и команда. '
+            'budget_usd — диапазон затрат на первый минимальный эксперимент (USD), first_payment_days — диапазон дней до первой оплаты. '
+            'Это суждения, а не установленные факты: дай basis и assumptions. Неизвестные границы оставь null с human_required. '
+            'Не подменяй оценку затрат выделенным бюджетом conditions.budget. Для calculation укажи claim_ids исходных данных.',model_id)
         data['assessment']=apply_evidence(result,data['sources'],pol)
         save_model(model_id,data,stage='critique')
     assessment=data['assessment']

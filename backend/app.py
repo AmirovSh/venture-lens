@@ -6,8 +6,9 @@ from sqlalchemy import select, update, text,func
 from sqlalchemy.exc import SQLAlchemyError
 from .execution import DependencyUnavailable
 from . import settings
-from .db import init, Session, Run, Model, Job, Event, Invocation, ProviderState,uid, dump, read
-from .schemas import ResearchInput, Decision
+from .db import init, Session, Run, Model, Job, Event, Invocation, ProviderState,EvidenceAction,Pilot,uid, dump, read
+from .schemas import ResearchInput, Decision, EvidenceActionInput, PilotInput
+from .decision_support import model_support, research_summary, tasks_for
 from .auth_context import verify_identity
 
 @asynccontextmanager
@@ -73,6 +74,19 @@ def serialize_run(s,r,detail=False):
     if detail:
         result['models']=[serialize_model(m) for m in models];result['policy']=read(r.policy)
         result['discovery_sources']=conf.get('discovery_sources',[])
+        model_ids=[m.id for m in models]
+        actions={}
+        for item in s.scalars(select(EvidenceAction).where(EvidenceAction.model_id.in_(model_ids))):
+            actions.setdefault(item.model_id,{})[item.task_key]={'status':item.status,'owner':item.owner,'note':item.note,'source_urls':read(item.source_urls),'version':item.version,'updated':item.updated}
+        pilots={item.model_id:{**read(item.data),'version':item.version,'updated':item.updated} for item in s.scalars(select(Pilot).where(Pilot.model_id.in_(model_ids)))}
+        for row,model in zip(result['models'],models):
+            row['support']=model_support(model,row['data'],conf,result['policy'],actions.get(model.id),pilots.get(model.id))
+            remaining=r.calls+5<=result['policy']['limits']['max_llm_calls'] and r.tokens+30000<=result['policy']['limits']['max_total_tokens']
+            inactive=r.status in ('completed','completed_with_gaps','partial')
+            pilot_active=pilots.get(model.id,{}).get('status')=='active'
+            row['support']['can_reassess']=inactive and remaining and not pilot_active
+            row['support']['reassess_reason']='Сначала остановите активный эксперимент.' if pilot_active else 'Дождитесь завершения текущих этапов.' if not inactive else 'Бюджет LLM исследования исчерпан; создайте новое исследование.' if not remaining else None
+        result['summary']=research_summary(result['models'],result['policy'],active=r.status in ('queued','running','waiting'))
     return result
 
 @app.get('/api/health')
@@ -207,6 +221,86 @@ def decision(id:str,body:Decision,request:Request):
         get_run(s,m.run_id,request)
         m.decision=body.decision;m.note=body.note
     return {'status':'saved'}
+
+
+def locked_model(s,id,request):
+    # Lock parent first, matching worker/recheck order and serializing concurrent edits.
+    run_id=s.scalar(select(Model.run_id).where(Model.id==id))
+    if not run_id:raise HTTPException(404,'Карточка не найдена')
+    query=select(Run).where(Run.id==run_id)
+    if s.bind.dialect.name=='postgresql':query=query.with_for_update()
+    run=s.scalar(query)
+    if not run or run.workspace!=request.state.identity['workspace']:raise HTTPException(404,'Карточка не найдена')
+    query=select(Model).where(Model.id==id)
+    if s.bind.dialect.name=='postgresql':query=query.with_for_update()
+    return s.scalar(query),run
+
+
+@app.patch('/api/models/{id}/tasks/{key}')
+def evidence_action(id:str,key:str,body:EvidenceActionInput,request:Request):
+    with Session.begin() as s:
+        model,run=locked_model(s,id,request)
+        task=next((task for task in tasks_for(read(model.data),read(run.policy)) if task['key']==key),None)
+        if not task:raise HTTPException(404,'Задача не найдена или уже не относится к текущей карточке')
+        saved=s.get(EvidenceAction,(id,key))
+        if body.version!=(saved.version if saved else 0):raise HTTPException(409,'Задача уже изменена. Обновите карточку.')
+        if not saved:saved=EvidenceAction(model_id=id,task_key=key,version=0);s.add(saved)
+        saved.status=body.status;saved.owner=body.owner;saved.note=body.note;saved.source_urls=dump(body.source_urls);saved.updated=time.time();saved.version+=1
+        s.add(Event(run_id=run.id,model_id=id,stage='evidence_task',message='Обновлена задача: '+task['title'],payload=dump({'key':key,'status':body.status,'version':saved.version})))
+        return {'status':'saved','version':saved.version,'notice':'Материалы сохранены. Автоматический допуск не изменён.'}
+
+
+@app.put('/api/models/{id}/pilot')
+def save_pilot(id:str,body:PilotInput,request:Request):
+    with Session.begin() as s:
+        model,run=locked_model(s,id,request)
+        saved=s.get(Pilot,id)
+        if body.version!=(saved.version if saved else 0):raise HTTPException(409,'Эксперимент уже изменён. Обновите карточку.')
+        gates=read(model.data).get('assessment',{}).get('gates',[])
+        if body.status in ('active','completed') and (model.status!='passed' or not gates or any(g['status']!='pass' for g in gates)):
+            raise HTTPException(409,'Запуск проверки спроса доступен после прохождения обязательных условий. Сначала закройте задачи по доказательствам.')
+        cap=read(run.settings).get('budget')
+        if cap is not None and body.budget_usd is not None and body.budget_usd>cap:raise HTTPException(422,'Бюджет эксперимента превышает лимит исследования')
+        previous=read(saved.data) if saved else None
+        if body.status in ('completed','stopped') and (not previous or previous.get('status') not in ('active','completed','stopped')):
+            raise HTTPException(409,'Сначала запустите эксперимент, затем запишите его результат')
+        value=body.model_dump(mode='json',exclude={'version'})
+        if not saved:saved=Pilot(model_id=id,version=0);s.add(saved)
+        saved.data=dump(value);saved.updated=time.time();saved.version+=1
+        s.add(Event(run_id=run.id,model_id=id,stage='pilot',message={'planned':'Сохранён план эксперимента','active':'Начата проверка спроса','completed':'Зафиксирован результат эксперимента','stopped':'Эксперимент остановлен'}[body.status],payload=dump({'version':saved.version,'previous':previous,'result':value})))
+        return {'status':'saved','version':saved.version}
+
+
+@app.post('/api/models/{id}/reassess',status_code=202)
+def reassess_model(id:str,request:Request):
+    with Session.begin() as s:
+        lock_admission(s)
+        model,run=locked_model(s,id,request)
+        member_active_limit(s,request,excluding=run.id)
+        if run.status not in ('completed','completed_with_gaps','partial'):raise HTTPException(409,'Дождитесь завершения или остановки всех этапов исследования')
+        if s.scalar(select(func.count()).select_from(Run).where(Run.status.in_(['queued','running','waiting'])))>=int(settings.setting('MAX_ACTIVE_RESEARCH','10')):
+            raise HTTPException(429,'Достигнут лимит одновременных исследований')
+        if s.scalar(select(Job.id).where(Job.run_id==run.id,Job.status=='running').limit(1)):raise HTTPException(409,'В исследовании ещё выполняется задание')
+        pilot=s.get(Pilot,id)
+        if pilot and read(pilot.data).get('status')=='active':raise HTTPException(409,'Сначала остановите активный эксперимент и сохраните его результат')
+        limits=read(run.policy)['limits']
+        if run.calls+5>limits['max_llm_calls'] or run.tokens+30000>limits['max_total_tokens']:raise HTTPException(409,'Для перепроверки недостаточно бюджета LLM. Создайте новое исследование.')
+        data=read(model.data)
+        links=[]
+        for urls in s.scalars(select(EvidenceAction.source_urls).where(EvidenceAction.model_id==id)):
+            links.extend(read(urls))
+        history=data.get('analysis_history',[])
+        snapshot={key:value for key,value in data.items() if key not in ('analysis_history',)}
+        history.append({'at':time.time(),'status':model.status,'score':model.score,'data':snapshot})
+        kept={key:data[key] for key in ('candidate','discovery_source') if key in data}
+        kept.update(analysis_history=history,additional_source_urls=list(dict.fromkeys(links))[:10])
+        model.data=dump(kept);model.status='queued';model.stage='dossier';model.score=None;model.score_upper=None;model.coverage=0;model.error=''
+        job=s.scalar(select(Job).where(Job.model_id==id))
+        if not job:job=Job(run_id=run.id,model_id=id,key='model:'+id);s.add(job)
+        job.status='queued';job.epoch=(job.epoch or 0)+1;job.attempts=0;job.next_retry_at=0;job.lease_owner=None;job.lease_until=0
+        run.status='queued';run.error='';run.waiting_reason='';run.generation+=1;run.updated=time.time()
+        s.add(Event(run_id=run.id,model_id=id,stage='reassess',message='Повторный отбор с новыми материалами. Предыдущая версия сохранена.',payload=dump({'additional_sources':len(kept['additional_source_urls'])})))
+    return {'status':'queued'}
 
 @app.get('/api/runs/{id}/export')
 def export(id:str,request:Request):

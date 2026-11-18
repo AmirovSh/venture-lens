@@ -36,6 +36,20 @@ def normalize_data(data, provenance, fallback_at):
     ]:
         for item in items:
             enrich(item, sources, provenance.get(role, {}), fallback_at, checking=role == 'verifier')
+    brief=data.get('assessment',{}).get('launch_brief') or data.get('launch_brief')
+    if brief:
+        grounded_ids={item['id'] for item in data.get('assessment',{}).get('claims',[]) if item.get('grounded')}
+        for key in ('budget_usd','first_payment_days'):
+            estimate=brief.get(key,{})
+            if estimate.get('method')=='calculation' and (not estimate.get('claim_ids') or not set(estimate['claim_ids'])<=grounded_ids):
+                estimate.update(method='model_judgment',confidence='low')
+                estimate['basis']+=' Исходные данные расчёта не подтверждены; это допущение модели.'
+            if estimate.get('low') is None:estimate.update(method='human_required',confidence='low')
+        role='launch_brief' if data.get('launch_brief') else 'screening'
+        origin=provenance.get(role,{})
+        data['launch_brief_provenance']={'method':'model_judgment','generated_at':origin.get('created') or fallback_at,
+            'invocation_id':origin.get('id'),'model':origin.get('model'),'input_hash':origin.get('input_hash'),
+            'note':'Гипотеза нашего запуска и оценка ресурсов; допущения требуют проверки, это не данные о затратах компании-аналога.'}
     return data
 
 

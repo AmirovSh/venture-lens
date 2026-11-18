@@ -1,4 +1,8 @@
 version: "3.0"
+decision_support:
+  minimum_priority_score: 60
+  minimum_evidence_coverage: 70
+  duplicate_similarity: 0.72
 audit_review_models: true
 minimum_analogue_usd: 300000000
 discovery_urls:

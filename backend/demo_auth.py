@@ -21,6 +21,7 @@ from sqlalchemy import MetaData, Table, Column, String, Float, Integer, create_e
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from .auth_context import sign_identity
 from .passwords import password_hash, password_matches
+from .schemas import OnboardingPreferences
 from .account_security import metadata, SecurityStoreMixin, install_security_routes, security
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
@@ -39,6 +40,9 @@ accounts = Table('registered_users', metadata, Column('username', String(64), pr
                  Column('name', String(60), nullable=False), Column('password_hash', String(256), nullable=False),
                  Column('workspace', String(64), nullable=False, unique=True), Column('created', Float, nullable=False),
                  Column('role', String(16), nullable=False, server_default='member', default='member'))
+preferences = Table('user_preferences',metadata,Column('username',String(64),primary_key=True),
+                    Column('onboarding_enabled',Integer,nullable=False,server_default='1'),
+                    Column('onboarding_seen_version',Integer,nullable=False,server_default='0'),Column('updated',Float,nullable=False))
 
 
 def safe_next(value):
@@ -330,6 +334,27 @@ def create_app(config=None, store=None, transport=None):
     def session(request: Request):
         identity = app.state.store.identity(request.cookies.get(COOKIE), app.state.config.users, time.time())
         return identity if identity else JSONResponse({'detail': 'Войдите в демонстрацию'}, 401)
+
+    @app.get('/auth/preferences')
+    def get_preferences(request:Request):
+        identity=app.state.store.identity(request.cookies.get(COOKIE),app.state.config.users,time.time())
+        if not identity:return JSONResponse({'detail':'Войдите в сервис'},401)
+        with app.state.store.engine.connect() as connection:
+            row=connection.execute(select(preferences).where(preferences.c.username==identity['username'])).mappings().first()
+        return {'onboarding_enabled':bool(row['onboarding_enabled']) if row else True,
+                'onboarding_seen_version':row['onboarding_seen_version'] if row else 0}
+
+    @app.patch('/auth/preferences')
+    def set_preferences(body:OnboardingPreferences,request:Request):
+        if request.headers.get('origin')!=app.state.config.origin:return JSONResponse({'detail':'Недопустимый источник запроса'},403)
+        identity=app.state.store.identity(request.cookies.get(COOKIE),app.state.config.users,time.time())
+        if not identity:return JSONResponse({'detail':'Войдите в сервис'},401)
+        engine=app.state.store.engine
+        insert=__import__('sqlalchemy.dialects.postgresql' if engine.dialect.name=='postgresql' else 'sqlalchemy.dialects.sqlite',fromlist=['insert']).insert
+        values={'username':identity['username'],**body.model_dump(),'updated':time.time()}
+        with engine.begin() as connection:
+            connection.execute(insert(preferences).values(**values).on_conflict_do_update(index_elements=[preferences.c.username],set_={key:value for key,value in values.items() if key!='username'}))
+        return body.model_dump()
 
     @app.post('/auth/logout')
     def logout(request: Request):
