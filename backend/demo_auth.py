@@ -9,6 +9,7 @@ import hmac
 import html
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import time
@@ -16,8 +17,9 @@ from urllib.parse import parse_qs, quote, unquote, urlsplit
 import httpx
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Response, StreamingResponse
-from sqlalchemy import MetaData, Table, Column, String, Float, Integer, create_engine, select, delete, case
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy import MetaData, Table, Column, String, Float, Integer, create_engine, select, delete, case, func, text
+from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from .auth_context import sign_identity
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
@@ -32,6 +34,9 @@ sessions = Table('demo_sessions', metadata, Column('token_hash', String(64), pri
                  Column('expires', Float, nullable=False, index=True))
 limits = Table('demo_login_limits', metadata, Column('key_hash', String(64), primary_key=True),
                Column('window_start', Float, nullable=False, index=True), Column('attempts', Integer, nullable=False))
+accounts = Table('registered_users', metadata, Column('username', String(64), primary_key=True),
+                 Column('name', String(60), nullable=False), Column('password_hash', String(256), nullable=False),
+                 Column('workspace', String(64), nullable=False, unique=True), Column('created', Float, nullable=False))
 
 
 def password_hash(password, salt=None):
@@ -64,15 +69,21 @@ class Config:
     users: dict
     database_url: str
     upstream: str = 'http://web:3100'
+    context_secret: str = ''
+    registration_enabled: bool = False
 
     @classmethod
     def environment(cls):
-        return cls(os.environ['PUBLIC_ORIGIN'].rstrip('/'), json.loads(os.environ['DEMO_AUTH_USERS']), os.environ['DATABASE_URL'])
+        return cls(os.environ['PUBLIC_ORIGIN'].rstrip('/'), json.loads(os.environ['DEMO_AUTH_USERS']), os.environ['DATABASE_URL'],
+                   context_secret=os.environ.get('AUTH_CONTEXT_SECRET', ''),
+                   registration_enabled=os.environ.get('REGISTRATION_ENABLED') == 'true')
 
     def validate(self):
         parsed = urlsplit(self.origin)
         if parsed.scheme != 'https' or not parsed.hostname or parsed.path or not self.users:
             raise ValueError('Public HTTPS origin and configured users are required')
+        if self.registration_enabled and len(self.context_secret) < 32:
+            raise ValueError('Registration requires a private identity signing secret')
         for username, user in self.users.items():
             if not username or len(username) > 64 or user.get('role') not in ('owner', 'viewer') or not user.get('password_hash', '').startswith('pbkdf2_sha256$600000$'):
                 raise ValueError('Invalid demo account configuration')
@@ -85,14 +96,15 @@ class Store:
     def ready(self):
         with self.engine.connect() as connection:
             connection.execute(select(sessions.c.token_hash).limit(1))
+            connection.execute(select(accounts.c.username).limit(1))
 
-    def attempt(self, address, now):
+    def attempt(self, address, now, window=WINDOW, maximum=MAX_ATTEMPTS):
         # One atomic counter shared by all replicas. No in-memory bypass on restart.
         from sqlalchemy.dialects.postgresql import insert as pg_insert
         from sqlalchemy.dialects.sqlite import insert as sqlite_insert
         insert = pg_insert if self.engine.dialect.name == 'postgresql' else sqlite_insert
         key = hashlib.sha256(address.encode()).hexdigest()
-        expired = limits.c.window_start <= now - WINDOW
+        expired = limits.c.window_start <= now - window
         statement = insert(limits).values(key_hash=key, window_start=now, attempts=1).on_conflict_do_update(
             index_elements=[limits.c.key_hash], set_={
                 'window_start': case((expired, now), else_=limits.c.window_start),
@@ -100,9 +112,27 @@ class Store:
             }).returning(limits.c.attempts)
         with self.engine.begin() as connection:
             count = connection.execute(statement).scalar_one()
-            connection.execute(delete(limits).where(limits.c.window_start < now - WINDOW * 2))
+            connection.execute(delete(limits).where(limits.c.window_start < now - 7200))
             connection.execute(delete(sessions).where(sessions.c.expires <= now))
-        return count <= MAX_ATTEMPTS
+        return count <= maximum
+
+    def user(self, username, configured):
+        if username in configured:
+            return configured[username] | {'workspace': 'main'}
+        with self.engine.connect() as connection:
+            row = connection.execute(select(accounts).where(accounts.c.username == username)).mappings().first()
+        return dict(row) | {'role': 'member'} if row else None
+
+    def register(self, username, name, encoded, now):
+        user = {'username': username, 'name': name, 'password_hash': encoded,
+                'workspace': secrets.token_hex(16), 'created': now}
+        with self.engine.begin() as connection:
+            if self.engine.dialect.name == 'postgresql':
+                connection.execute(text('SELECT pg_advisory_xact_lock(862319004)'))
+            if connection.scalar(select(func.count()).select_from(accounts)) >= 200:
+                raise ValueError('Регистрация временно приостановлена: достигнут лимит демонстрационного сервера.')
+            connection.execute(accounts.insert().values(**user))
+        return user | {'role': 'member'}
 
     def issue(self, username, user, now):
         token = secrets.token_urlsafe(32)
@@ -118,20 +148,37 @@ class Store:
             row = connection.execute(select(sessions).where(sessions.c.token_hash == hashlib.sha256(token.encode()).hexdigest(), sessions.c.expires > now)).mappings().first()
         if not row:
             return None
-        user = users.get(row['username'])
+        user = self.user(row['username'], users)
         if not user or not hmac.compare_digest(row['credential_version'], hashlib.sha256(user['password_hash'].encode()).hexdigest()):
             return None
-        return {'username': row['username'], 'name': user.get('name', row['username']), 'role': user['role'], 'expires': row['expires']}
+        return {'username': row['username'], 'name': user.get('name', row['username']), 'role': user['role'],
+                'workspace': user['workspace'], 'expires': row['expires'],
+                'limits': {'active': 1, 'daily': 3} if user['role'] == 'member' else None}
 
     def revoke(self, token):
         with self.engine.begin() as connection:
             connection.execute(delete(sessions).where(sessions.c.token_hash == hashlib.sha256(token.encode()).hexdigest()))
 
 
-def login_page(message='', username='', next_path='/'):
+def login_page(message='', username='', next_path='/', registration_enabled=False, registering=False, name=''):
     template = (Path(__file__).parent / 'templates/demo_login.html').read_text(encoding='utf-8')
-    return template.replace('{{ERROR}}', '<div class="error" role="alert">' + html.escape(message) + '</div>' if message else '') \
-                   .replace('{{USERNAME}}', html.escape(username, quote=True)).replace('{{NEXT}}', html.escape(safe_next(next_path), quote=True))
+    extra = ('<label for="name">Как вас зовут</label><input id="name" name="name" autocomplete="name" minlength="2" maxlength="60" required value="' + html.escape(name, quote=True) + '" placeholder="Ваше имя">') if registering else ''
+    confirm = ('<small id="password-hint">От 12 до 128 символов. Можно использовать длинную фразу.</small><label for="password_confirm">Повторите пароль</label><input id="password_confirm" type="password" name="password_confirm" autocomplete="new-password" minlength="12" maxlength="128" required placeholder="Повторите пароль">') if registering else ''
+    switch = ('<p class="switch">Уже есть аккаунт? <a href="/auth/login">Войти</a></p>' if registering else '<p class="switch">Впервые здесь? <a href="/auth/register">Создать аккаунт</a></p>') if registration_enabled else ''
+    values = {'ERROR': '<div class="error" role="alert">' + html.escape(message) + '</div>' if message else '',
+              'USERNAME': html.escape(username, quote=True), 'NEXT': html.escape(safe_next(next_path), quote=True),
+              'TITLE': 'Создайте своё пространство' if registering else 'Добро пожаловать',
+              'PAGE_TITLE': 'Регистрация' if registering else 'Вход',
+              'INTRO': 'Личные исследования, проверяемые источники и сравнение моделей. Одно исследование одновременно, до трёх новых запусков за сутки.' if registering else 'Войдите, чтобы продолжить свои исследования или посмотреть демонстрацию.',
+              'ACTION': '/auth/register' if registering else '/auth/login', 'NAME_FIELD': extra, 'CONFIRM_FIELD': confirm,
+              'PASSWORD_AUTOCOMPLETE': 'new-password' if registering else 'current-password',
+              'PASSWORD_MIN': '12' if registering else '1', 'PASSWORD_MAX': '128' if registering else '1024',
+              'USERNAME_HINT': '<small id="username-hint">3–32 символа: латинские буквы, цифры, точка, дефис и подчёркивание.</small>' if registering else '',
+              'SUBMIT': 'Создать аккаунт' if registering else 'Войти в рабочее пространство', 'SWITCH': switch,
+              'NOTE': 'Сохраните логин и пароль: восстановление доступа пока недоступно. Ваши исследования видны только вам.' if registering else 'Сессия действует 8 часов. Доступ к демонстрации — по реквизитам автора проекта.'}
+    for key, value in values.items():
+        template = template.replace('{{' + key + '}}', value)
+    return template
 
 
 def create_app(config=None, store=None, transport=None):
@@ -148,6 +195,15 @@ def create_app(config=None, store=None, transport=None):
             app.state.store.engine.dispose()
 
     app = FastAPI(title='Venture Lens demo access', docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
+
+    def page(*args, **kwargs):
+        return login_page(*args, registration_enabled=app.state.config.registration_enabled, **kwargs)
+
+    def signed_in(username, user, next_path='/'):
+        token = app.state.store.issue(username, user, time.time())
+        response = RedirectResponse(next_path, 303)
+        response.set_cookie(COOKIE, token, max_age=TTL, secure=True, httponly=True, samesite='lax', path='/')
+        return response
 
     @app.middleware('http')
     async def guarded(request, call_next):
@@ -171,7 +227,58 @@ def create_app(config=None, store=None, transport=None):
     @app.get('/auth/login', response_class=HTMLResponse)
     def login(request: Request, next: str = '/'):
         identity = app.state.store.identity(request.cookies.get(COOKIE), app.state.config.users, time.time())
-        return RedirectResponse(safe_next(next), 303) if identity else HTMLResponse(login_page(next_path=next))
+        return RedirectResponse(safe_next(next), 303) if identity else HTMLResponse(page(next_path=next))
+
+    @app.get('/auth/register', response_class=HTMLResponse)
+    def register_page(request: Request):
+        if not app.state.config.registration_enabled:
+            return JSONResponse({'detail': 'Регистрация пока недоступна'}, 404)
+        identity = app.state.store.identity(request.cookies.get(COOKIE), app.state.config.users, time.time())
+        return RedirectResponse('/', 303) if identity else HTMLResponse(page(registering=True))
+
+    @app.post('/auth/register')
+    async def register(request: Request):
+        cfg, database = app.state.config, app.state.store
+        if not cfg.registration_enabled:
+            return JSONResponse({'detail': 'Регистрация пока недоступна'}, 404)
+        if request.headers.get('origin') != cfg.origin:
+            return JSONResponse({'detail': 'Недопустимый источник запроса'}, 403)
+        body = bytearray()
+        async for chunk in request.stream():
+            body.extend(chunk)
+            if len(body) > 4096:
+                return JSONResponse({'detail': 'Слишком большой запрос'}, 413)
+        address = request.headers.get('x-forwarded-for', request.client.host if request.client else 'unknown')
+        if not await run_in_threadpool(database.attempt, 'register:' + address, time.time(), 3600, 5):
+            return HTMLResponse(page('Слишком много попыток регистрации. Попробуйте через час.', registering=True), 429, headers={'Retry-After': '3600'})
+        try:
+            fields = parse_qs(body.decode(), max_num_fields=6)
+        except (ValueError, UnicodeError):
+            return HTMLResponse(page('Проверьте введённые данные.', registering=True), 400)
+        username = fields.get('username', [''])[0].strip().lower()
+        name = fields.get('name', [''])[0].strip()
+        password = fields.get('password', [''])[0]
+        confirmation = fields.get('password_confirm', [''])[0]
+        def invalid(message, status=422):
+            return HTMLResponse(page(message, username, registering=True, name=name), status)
+        if not re.fullmatch(r'[a-z0-9][a-z0-9._-]{2,31}', username):
+            return invalid('Логин: от 3 до 32 символов, латинские буквы, цифры, точка, дефис или подчёркивание.')
+        if not 2 <= len(name) <= 60 or any(ord(c) < 32 for c in name):
+            return invalid('Укажите имя длиной от 2 до 60 символов.')
+        if not 12 <= len(password) <= 128 or not password.strip():
+            return invalid('Пароль должен содержать от 12 до 128 символов.')
+        if not hmac.compare_digest(password.encode(), confirmation.encode()):
+            return invalid('Пароли не совпадают.')
+        if username in {key.lower() for key in cfg.users}:
+            return invalid('Этот логин уже занят. Выберите другой.', 409)
+        encoded = await run_in_threadpool(password_hash, password)
+        try:
+            user = await run_in_threadpool(database.register, username, name, encoded, time.time())
+        except IntegrityError:
+            return invalid('Этот логин уже занят. Выберите другой.', 409)
+        except ValueError as error:
+            return invalid(str(error), 429)
+        return await run_in_threadpool(signed_in, username, user)
 
     @app.post('/auth/login')
     async def authenticate(request: Request):
@@ -186,23 +293,20 @@ def create_app(config=None, store=None, transport=None):
         try:
             fields = parse_qs(body.decode(), max_num_fields=4)
         except (ValueError, UnicodeError):
-            return HTMLResponse(login_page('Проверьте введённые данные.'), 400)
-        username = fields.get('username', [''])[0].strip()[:64]
+            return HTMLResponse(page('Проверьте введённые данные.'), 400)
+        username = fields.get('username', [''])[0].strip().lower()[:64]
         password = fields.get('password', [''])[0]
         next_path = safe_next(fields.get('next', ['/'])[0])
         # NetworkPolicy accepts callers only from Caddy, which overwrites this header.
         address = request.headers.get('x-forwarded-for', request.client.host if request.client else 'unknown')
         if not await run_in_threadpool(database.attempt, address, time.time()):
-            return HTMLResponse(login_page('Слишком много попыток. Попробуйте через 5 минут.', username, next_path), 429, headers={'Retry-After': str(WINDOW)})
-        user = cfg.users.get(username)
+            return HTMLResponse(page('Слишком много попыток. Попробуйте через 5 минут.', username, next_path), 429, headers={'Retry-After': str(WINDOW)})
+        user = await run_in_threadpool(database.user, username, cfg.users)
         expected = (user or next(iter(cfg.users.values())))['password_hash']
         valid = await run_in_threadpool(password_matches, password, expected)
         if not user or not valid:
-            return HTMLResponse(login_page('Неверное имя пользователя или пароль.', username, next_path), 401)
-        token = await run_in_threadpool(database.issue, username, user, time.time())
-        response = RedirectResponse(next_path, 303)
-        response.set_cookie(COOKIE, token, max_age=TTL, secure=True, httponly=True, samesite='lax', path='/')
-        return response
+            return HTMLResponse(page('Неверное имя пользователя или пароль.', username, next_path), 401)
+        return await run_in_threadpool(signed_in, username, user, next_path)
 
     @app.get('/auth/session')
     def session(request: Request):
@@ -230,7 +334,7 @@ def create_app(config=None, store=None, transport=None):
         if request.method not in ('GET', 'HEAD', 'OPTIONS'):
             if request.headers.get('origin') != app.state.config.origin:
                 return JSONResponse({'detail': 'Недопустимый источник запроса'}, 403)
-            if identity['role'] != 'owner':
+            if identity['role'] not in ('owner', 'member'):
                 return JSONResponse({'detail': 'Гостевой доступ разрешает только просмотр'}, 403)
         body = bytearray()
         async for chunk in request.stream():
@@ -238,7 +342,9 @@ def create_app(config=None, store=None, transport=None):
             if len(body) > MAX_BODY:
                 return JSONResponse({'detail': 'Слишком большой запрос'}, 413)
         hop = {'host', 'connection', 'keep-alive', 'transfer-encoding', 'te', 'trailer', 'upgrade', 'proxy-authenticate', 'proxy-authorization', 'cookie', 'authorization', 'content-length'}
-        headers = {key: value for key, value in request.headers.items() if key.lower() not in hop}
+        headers = {key: value for key, value in request.headers.items() if key.lower() not in hop and not key.lower().startswith('x-venture-')}
+        if app.state.config.context_secret:
+            headers.update(sign_identity(identity, app.state.config.context_secret))
         target = app.state.config.upstream.rstrip('/') + '/' + path
         if request.url.query:
             target += '?' + request.url.query

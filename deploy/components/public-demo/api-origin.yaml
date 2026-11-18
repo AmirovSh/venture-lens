@@ -10,3 +10,7 @@ spec:
         - name: ALLOWED_ORIGINS
           valueFrom:
             configMapKeyRef: {name: venture-lens-public-settings, key: ALLOWED_ORIGINS}
+        - {name: AUTH_CONTEXT_REQUIRED, value: 'true'}
+        - name: AUTH_CONTEXT_SECRET
+          valueFrom:
+            secretKeyRef: {name: venture-lens-demo-access, key: AUTH_CONTEXT_SECRET}

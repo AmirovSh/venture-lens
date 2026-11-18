@@ -27,6 +27,7 @@ with psycopg.connect(os.environ['DATABASE_URL'].replace('postgresql+psycopg://',
         cursor.execute(sql.SQL('GRANT CONNECT ON DATABASE {} TO {}').format(sql.Identifier(db.info.dbname),sql.Identifier(name)))
         cursor.execute(sql.SQL('GRANT USAGE ON SCHEMA public TO {}').format(sql.Identifier(name)))
         cursor.execute(sql.SQL('GRANT SELECT,INSERT,UPDATE,DELETE ON demo_sessions,demo_login_limits TO {}').format(sql.Identifier(name)))
+        cursor.execute(sql.SQL('GRANT SELECT,INSERT ON registered_users TO {}').format(sql.Identifier(name)))
 '''
 
 
@@ -64,6 +65,7 @@ def main():
         encoded = old_hash if old_hash and password_matches(account['password'], old_hash) else password_hash(account['password'])
         users[account['username']] = {'role': role, 'name': name, 'password_hash': encoded}
     state['DEMO_AUTH_USERS'] = json.dumps(users, ensure_ascii=False)
+    state.setdefault('AUTH_CONTEXT_SECRET', secrets.token_urlsafe(48))
     state.setdefault('DATABASE_URL', 'postgresql+psycopg://venturelens_access:' + secrets.token_urlsafe(24) + '@postgres:5432/venturelens')
     state_path.write_text(json.dumps(state, ensure_ascii=False))
     private_permissions(credentials_path)

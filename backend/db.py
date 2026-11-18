@@ -22,6 +22,7 @@ def read(value): return json.loads(value)
 class Run(Base):
     __tablename__ = 'runs'
     id = Column(String, primary_key=True, default=uid)
+    workspace = Column(String(64), nullable=False, default='main', server_default='main', index=True)
     title = Column(String, nullable=False)
     status = Column(String, default='queued', index=True)
     created = Column(Float, default=time.time)
