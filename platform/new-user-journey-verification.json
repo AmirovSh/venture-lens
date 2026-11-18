@@ -1,0 +1,110 @@
+{
+  "verified_at": "2026-11-18T19:50:15.050399+00:00",
+  "url": "https://venture-lens.duckdns.org",
+  "run_id": "d147ab77d8a246b7",
+  "test_space": "new registered member private workspace",
+  "real_research": {
+    "status": "completed_with_gaps",
+    "cards": 10,
+    "passed": 1,
+    "review": 9,
+    "technical_errors": 0,
+    "llm_calls": 40,
+    "tokens_including_reserve": 189524,
+    "admitted_index": 38.0,
+    "sources": 109
+  },
+  "server_checks": {
+    "browser_plan_saved": true,
+    "active_pilot_persisted": true,
+    "task_note_persisted_without_admission": true,
+    "all_ten_launch_briefs": true,
+    "full_json_export_contains_pilot": true,
+    "export_bytes": 1826296,
+    "stale_version_409": true,
+    "over_budget_422": true,
+    "over_90_days_422": true,
+    "review_pilot_start_409": true,
+    "active_pilot_reassessment_409": true,
+    "private_workspace_isolation_both_directions": true,
+    "main_demo_two_runs_preserved": true,
+    "seen_instruction_persisted": true,
+    "active_pilot_survives_fresh_login": true,
+    "completed_pilot_persisted": true,
+    "pilot_three_versions_audited": true,
+    "completed_pilot_survives_fresh_login": true,
+    "completed_pilot_exported": true
+  },
+  "boundaries": [
+    "Real corporate LLM research; no synthetic source/gate/score injection.",
+    "Pilot is an explicitly labelled UI test; no real outreach, sales or revenue were recorded.",
+    "A low index is not a recommendation to launch a business."
+  ],
+  "final_pilot": {
+    "status": "completed",
+    "version": 3,
+    "all_business_metrics_zero": true,
+    "active_pilots_remaining": 0
+  },
+  "audit": {
+    "invocations": 40,
+    "models_used": [
+      "deepseek-v4-flash",
+      "qwen3.8-27b"
+    ],
+    "roles": {
+      "discovery": 1,
+      "screening": 10,
+      "critic": 10,
+      "verification_search": 9,
+      "verifier": 10
+    },
+    "all_input_hashes_valid": true,
+    "critic_verifier_packet_isolation_valid": true
+  },
+  "browser_checks": {
+    "registration_submitted_from_form": true,
+    "empty_private_workspace": true,
+    "instruction_six_steps_read": true,
+    "instruction_not_repeated_after_reload_and_login": true,
+    "research_submitted_from_form": true,
+    "progress_survives_reload": true,
+    "unfinished_card_explained": true,
+    "evidence_and_source_library_opened": true,
+    "task_saved_from_form": true,
+    "review_plan_saved_and_start_disabled": true,
+    "one_selection_comparison_disabled": true,
+    "two_models_comparison_opened": true,
+    "mixed_admission_warning_visible": true,
+    "passed_filter_works": true,
+    "pilot_planned_active_completed_from_forms": true,
+    "active_pilot_visible_after_reload_and_browser_login": true,
+    "completion_empty_result_focuses_required_field": true,
+    "completion_whitespace_result_explained": true,
+    "completion_result_saved": true,
+    "javascript_errors_observed_after_final_reload": 0,
+    "desktop_access_interruption_recovered": true
+  },
+  "fix": {
+    "problem": "Completing a pilot without a result displayed a generic field error omitting the result field.",
+    "change": "Required result textarea, Russian hint, whitespace validation, preservation of meaningful server validation messages.",
+    "code_commit": "revision-omitted",
+    "web_image": "venture-lens-web:journey-revision-omitted",
+    "typescript": "passed",
+    "next_production_build": "passed",
+    "browser_retest": "passed"
+  },
+  "ux_assessment": {
+    "core_path": "Completed without changing roles, gates or scores; one actionable validation issue corrected.",
+    "remaining_friction": [
+      "Comparison and pilot forms are long; a fixed save/start action and a shorter overview would reduce scrolling.",
+      "The source library has 109 entries; filtering by company/source type would make evidence review easier."
+    ],
+    "business_quality": "Nine review results are evidence gaps, not technical failures. Legal conclusions remain model judgments; passing filters is not legal clearance."
+  },
+  "screenshots": [
+    ".platform/new-user-comparison.jpg",
+    ".platform/new-user-active-pilot.jpg",
+    ".platform/new-user-completed-pilot.jpg"
+  ]
+}
