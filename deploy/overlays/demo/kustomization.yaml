@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: venture-lens-demo
+resources:
+  - ../../base
+  - ../local/infrastructure.yaml
+  - ../local/bucket.yaml
+patches:
+  - target: {kind: Namespace, name: venture-lens}
+    patch: |-
+      - op: replace
+        path: /metadata/name
+        value: venture-lens-demo
+configMapGenerator:
+  - name: venture-lens-config
+    behavior: merge
+    literals:
+      - ALLOWED_ORIGINS=http://127.0.0.1:3210,http://localhost:3210
+      - S3_PROVISION_BUCKET=true
+images:
+  - {name: venture-lens-api, newName: venture-lens-api, newTag: demo-bootstrap}
+  - {name: venture-lens-web, newName: venture-lens-web, newTag: demo-bootstrap}
+replicas:
+  - {name: api, count: 1}
+  - {name: worker, count: 1}
+  - {name: web, count: 1}
