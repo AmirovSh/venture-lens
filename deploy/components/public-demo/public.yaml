@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: Service
+metadata: {name: demo-access}
+spec:
+  selector: {app: demo-access}
+  ports: [{port: 8090, targetPort: 8090}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: demo-access}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: demo-access}}
+  strategy: {type: RollingUpdate, rollingUpdate: {maxUnavailable: 0, maxSurge: 1}}
+  template:
+    metadata: {labels: {app: demo-access}}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext: {runAsNonRoot: true, runAsUser: 10001, fsGroup: 10001}
+      initContainers:
+      - name: migrate
+        image: venture-lens-api:dev
+        command: [python, -m, backend.migrate]
+        envFrom: [{configMapRef: {name: venture-lens-config}}, {secretRef: {name: venture-lens-runtime}}]
+        resources: {requests: {cpu: 25m, memory: 96Mi}, limits: {cpu: '1', memory: 256Mi}}
+        securityContext: {allowPrivilegeEscalation: false, capabilities: {drop: [ALL]}}
+      containers:
+      - name: access
+        image: venture-lens-api:dev
+        command: [uvicorn, backend.demo_auth:app, --host, 0.0.0.0, --port, '8090', --no-access-log, --no-proxy-headers]
+        env:
+        - {name: PUBLIC_ORIGIN, value: 'https://91.108.213.165'}
+        - {name: PYTHONDONTWRITEBYTECODE, value: '1'}
+        - name: DATABASE_URL
+          valueFrom: {secretKeyRef: {name: venture-lens-runtime, key: DATABASE_URL}}
+        - name: DEMO_AUTH_USERS
+          valueFrom: {secretKeyRef: {name: venture-lens-demo-access, key: DEMO_AUTH_USERS}}
+        ports: [{containerPort: 8090}]
+        startupProbe: {httpGet: {path: /auth/live, port: 8090}, periodSeconds: 2, failureThreshold: 60}
+        livenessProbe: {httpGet: {path: /auth/live, port: 8090}, periodSeconds: 10}
+        readinessProbe: {httpGet: {path: /auth/ready, port: 8090}, periodSeconds: 5, timeoutSeconds: 3}
+        resources: {requests: {cpu: 50m, memory: 96Mi}, limits: {cpu: '1', memory: 256Mi}}
+        securityContext: {allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: {drop: [ALL]}}
+        volumeMounts: [{name: tmp, mountPath: /tmp}]
+      volumes: [{name: tmp, emptyDir: {sizeLimit: 32Mi}}]
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: public-edge-data
+  annotations: {argocd.argoproj.io/sync-options: 'Prune=false'}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 1Gi}}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: public-edge}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: public-edge}}
+  strategy: {type: Recreate}
+  template:
+    metadata: {labels: {app: public-edge}}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext: {runAsNonRoot: true, runAsUser: 1000, fsGroup: 1000}
+      containers:
+      - name: caddy
+        image: caddy@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+        ports:
+        - {name: http, containerPort: 80, hostPort: 80, protocol: TCP}
+        - {name: https, containerPort: 443, hostPort: 443, protocol: TCP}
+        startupProbe: {tcpSocket: {port: 443}, periodSeconds: 2, failureThreshold: 60}
+        livenessProbe: {tcpSocket: {port: 443}, periodSeconds: 10}
+        readinessProbe: {tcpSocket: {port: 443}, periodSeconds: 5}
+        resources: {requests: {cpu: 25m, memory: 48Mi}, limits: {cpu: '1', memory: 192Mi}}
+        securityContext:
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: [ALL], add: [NET_BIND_SERVICE]}
+        volumeMounts:
+        - {name: config-file, mountPath: /etc/caddy, readOnly: true}
+        - {name: data, mountPath: /data}
+        - {name: config-state, mountPath: /config}
+        - {name: tmp, mountPath: /tmp}
+      volumes:
+      - name: config-file
+        configMap: {name: venture-lens-public-edge}
+      - name: data
+        persistentVolumeClaim: {claimName: public-edge-data}
+      - {name: config-state, emptyDir: {sizeLimit: 16Mi}}
+      - {name: tmp, emptyDir: {sizeLimit: 16Mi}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: {name: demo-access}
+spec:
+  podSelector: {matchLabels: {app: demo-access}}
+  policyTypes: [Ingress]
+  ingress:
+  - from: [{podSelector: {matchLabels: {app: public-edge}}}]
+    ports: [{protocol: TCP, port: 8090}]

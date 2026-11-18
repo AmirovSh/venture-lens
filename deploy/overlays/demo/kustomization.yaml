@@ -24,15 +24,15 @@ configMapGenerator:
 - name: venture-lens-config
   behavior: merge
   literals:
-  - ALLOWED_ORIGINS=http://127.0.0.1:3210,http://localhost:3210
+  - ALLOWED_ORIGINS=http://127.0.0.1:3210,http://localhost:3210,https://91.108.213.165
   - S3_PROVISION_BUCKET=true
 images:
 - name: venture-lens-api
   newName: venture-lens-api
-  newTag: demo-bootstrap
+  newTag: demo-public-18115158ab4389ed
 - name: venture-lens-web
   newName: venture-lens-web
-  newTag: demo-bootstrap
+  newTag: demo-public-18115158ab4389ed
 - name: venture-lens-vpn-gateway
   newName: venture-lens-vpn-gateway
   newTag: vpn-51526eaa9d61e86e
@@ -43,7 +43,10 @@ replicas:
   count: 1
 - name: web
   count: 1
+- name: public-edge
+  count: 0
 components:
 - ../../components/search
 - ../../components/autoscaling
 - ../../components/corporate-vpn
+- ../../components/public-demo
