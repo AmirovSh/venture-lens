@@ -50,8 +50,9 @@ API и worker используют общие лимиты провайдеро�
 
 ## GitOps и CI/CD
 
+Argo CD синхронизирует `deploy/overlays/demo` непосредственно из **[публичного GitHub](https://github.com/AmirovSh/venture-lens)**, ветка `master`, по HTTPS без учётных данных GitHub на сервере. Объявление Application и AppProject находится в `deploy/argocd/demo.yaml`. Прежнее локальное зеркало не используется как источник приложения.
 
-GitHub Actions с проверками, fault-тестами, публикацией проверенных образов в GHCR и продвижением digest подготовлены в `.github/workflows`. **Приватный [GitHub-репозиторий](https://github.com/AmirovSh/venture-lens) опубликован, облачные Actions запущены. Argo CD пока использует зеркало VPS.** Для прямых автоматических релизов из GitHub нужны проверенный registry, защита ветки и отдельное переключение источника Argo CD. Production overlay содержит обязательные placeholders и не используется как готовая конфигурация.
+GitHub Actions с проверками, fault-тестами, публикацией проверенных образов в GHCR и продвижением digest подготовлены в `.github/workflows`. **[GitHub-репозиторий](https://github.com/AmirovSh/venture-lens) публичный, облачные Actions запущены, Argo CD читает его напрямую.** Для доставки новой сборки требуется обновить image tag/digest в отслеживаемом overlay после проверки сборки. Production overlay содержит обязательные placeholders и не используется как готовая конфигурация.
 
 Bootstrap: `platform/server/bootstrap.sh` → `build.sh` → `deploy.py` → `addons.py`. До запуска нужны проверенный SSH-ключ, исходники `/opt/venture-lens/source`, приватный `runtime.json` и Secret настроек SearXNG. Для публичного доступа после миграции API также нужен `platform/configure_public_demo.py`: он создаёт ограниченную роль БД и Secret авторизации. Пока авторизация не готова, публичный шлюз не пропускает запросы к приложению. `addons.py` использует официальные manifests версий из `platform/toolchain.json`, сохранённые на VPS как `keda-install.yaml` и `argocd-install.yaml`. Секреты исключены из Git bundle и Docker context.
 
@@ -95,6 +96,6 @@ systemctl is-active k3s venture-lens-web-forward venture-lens-argo-forward
 '@ | .\.venv\Scripts\python.exe platform\ssh_client.py
 ```
 
-`venture-lens-web-forward`, `venture-lens-argo-forward`, `venture-lens-git` включены в systemd, имеют `Restart=always` и следуют перезапуску K3s. Для доступа без этого компьютера нужен собственный безопасный SSH-маршрут и защищённая копия ключа.
+`venture-lens-web-forward` и `venture-lens-argo-forward` включены в systemd, имеют `Restart=always` и следуют перезапуску K3s. Для доступа без этого компьютера нужен собственный безопасный SSH-маршрут и защищённая копия ключа.
 
 Для длительного использования остаются сервисные VPN/mTLS-реквизиты с ротацией, GitHub/registry, почтовая доставка/OIDC, внешние регулярные backups и мониторинг с уведомлениями. Для устойчивости к отказу хоста нужны несколько узлов и внешние/HA сервисы данных. Нагрузочная ёмкость этого VPS пока не измерялась.

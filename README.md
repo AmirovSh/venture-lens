@@ -1,6 +1,6 @@
 # Venture Lens
 
-Репозиторий с историей: [AmirovSh/venture-lens](https://github.com/AmirovSh/venture-lens) (приватный). Проверки: [GitHub Actions](https://github.com/AmirovSh/venture-lens/actions).
+Репозиторий с историей: [AmirovSh/venture-lens](https://github.com/AmirovSh/venture-lens) (публичный). Проверки: [GitHub Actions](https://github.com/AmirovSh/venture-lens/actions).
 
 Сервис поиска и проверки бизнес-моделей с локальным запуском и рабочей демонстрацией на VPS. Главный результат — одинаковые по структуре карточки, открытые доказательства и сравнение моделей на горизонте первой оплаты за 90 дней.
 

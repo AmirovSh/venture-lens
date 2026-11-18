@@ -1,4 +1,4 @@
-"""Private single-server GitOps and autoscaling bootstrap; no public ingress."""
+"""Single-server GitOps from public GitHub; administrative UI stays private."""
 import json
 import subprocess
 from pathlib import Path
@@ -16,16 +16,7 @@ def main():
     kube('-n','argocd','patch','configmap','argocd-cmd-params-cm','--type=merge','-p',json.dumps({'data':{'server.insecure':'true','controller.status.processors':'5','controller.operation.processors':'2','reposerver.parallelism.limit':'1'}}))
     kube('-n','argocd','rollout','restart','deployment/argocd-server')
     for name in ['argocd-server','argocd-repo-server','argocd-redis']:kube('-n','argocd','rollout','status','deployment/'+name,'--timeout=240s')
-    mirror=ROOT/'git/repo.git';mirror.parent.mkdir(exist_ok=True)
-    if not mirror.exists():run(['git','clone','--bare',str(ROOT/'source'),str(mirror)])
-    # Source bundles are checked out by SHA; a bare clone of detached HEAD has
-    # no branch for Argo CD to resolve. Always create/update the desired ref.
-    run(['git','-C',str(mirror),'fetch',str(ROOT/'source'),'+HEAD:refs/heads/master'])
-    run(['git','-C',str(mirror),'symbolic-ref','HEAD','refs/heads/master'])
-    service('venture-lens-git',f'/usr/bin/git -c safe.directory=* daemon --reuseaddr --base-path={ROOT}/git --export-all --listen=127.0.0.1 --port=9418 {ROOT}/git','Read-only private GitOps source')
-    repo='git://127.0.0.1:9418/repo.git'
-    apply({'apiVersion':'argoproj.io/v1alpha1','kind':'AppProject','metadata':{'name':'venture-lens','namespace':'argocd'},'spec':{'sourceRepos':[repo],'destinations':[{'server':'https://kubernetes.default.svc','namespace':NS}],'clusterResourceWhitelist':[{'group':'','kind':'Namespace'}]}})
-    apply({'apiVersion':'argoproj.io/v1alpha1','kind':'Application','metadata':{'name':'venture-lens','namespace':'argocd'},'spec':{'project':'venture-lens','source':{'repoURL':repo,'targetRevision':'master','path':'deploy/overlays/demo'},'destination':{'server':'https://kubernetes.default.svc','namespace':NS},'syncPolicy':{'automated':{'selfHeal':True,'prune':True},'syncOptions':['RespectIgnoreDifferences=true','PruneLast=true']},'ignoreDifferences':[{'group':'apps','kind':'Deployment','name':name,'jsonPointers':['/spec/replicas']} for name in ['api','worker']]}})
+    kube('apply','-f',str(ROOT/'source/deploy/argocd/demo.yaml'))
     service('venture-lens-argo-forward','/usr/local/bin/k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml -n argocd port-forward --address 127.0.0.1 service/argocd-server 3090:80','Loopback-only Argo CD demo access')
     print('ADDONS_READY',flush=True)
 
