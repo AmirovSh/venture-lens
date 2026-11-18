@@ -44,7 +44,7 @@ replicas:
 - name: web
   count: 1
 - name: public-edge
-  count: 0
+  count: 1
 components:
 - ../../components/search
 - ../../components/autoscaling
