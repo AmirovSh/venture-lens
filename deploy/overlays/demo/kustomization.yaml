@@ -29,10 +29,10 @@ configMapGenerator:
 images:
 - name: venture-lens-api
   newName: venture-lens-api
-  newTag: security-revision-omitted
+  newTag: spec-revision-omitted
 - name: venture-lens-web
   newName: venture-lens-web
-  newTag: security-revision-omitted
+  newTag: spec-revision-omitted
 - name: venture-lens-vpn-gateway
   newName: venture-lens-vpn-gateway
   newTag: vpn-51526eaa9d61e86e
