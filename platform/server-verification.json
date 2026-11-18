@@ -94,6 +94,7 @@
       "tls_verified": true,
       "roles": [
         "owner",
+        "admin",
         "viewer",
         "member"
       ],
@@ -105,13 +106,21 @@
       "personal_workspace_isolation": true,
       "registration_report": "platform/public-verification.json",
       "registration_checked_at": "2026-11-18T10:40:59.429760+00:00"
+    },
+    "account_security": {
+      "enabled": true,
+      "method": "administrator-assisted single-use link",
+      "owner": "owner",
+      "reset_link_ttl_seconds": 900,
+      "verified_at": "2026-11-18T11:29:24.166244+00:00",
+      "report": "platform/account-security-verification.json"
     }
   },
   "limitations": [
     "single physical host; database and S3 not HA",
     "all real research candidates require evidence review; no qualified ranking",
     "GitHub Actions/GHCR prepared but not executed remotely",
-    "scheduled off-host backups, alerts, password recovery/OIDC and load tests pending",
+    "scheduled off-host backups, alerts, OIDC and load tests pending",
     "full worker fault suite verified previously on isolated local cluster; real VPS worker scaling 1 -> 2 -> 1 observed with autonomous research"
   ]
 }

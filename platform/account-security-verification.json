@@ -1,0 +1,74 @@
+{
+  "verified_at": "2026-11-18T11:29:24.166244+00:00",
+  "scope": "password changes and administrator-assisted recovery on public VPS",
+  "release": {
+    "api": "venture-lens-api:security-revision-omitted",
+    "web": "venture-lens-web:security-revision-omitted"
+  },
+  "postgresql_tests": {
+    "passed": 68,
+    "skipped": 0,
+    "isolated_database": true,
+    "concurrent_reset_single_consumption": true,
+    "stale_admin_action_conflict": true
+  },
+  "external": {
+    "url": "https://venture-lens.duckdns.org",
+    "checked_at": "2026-11-18T11:22:35.090562+00:00",
+    "owner_exists": true,
+    "password_change": true,
+    "old_password_rejected": true,
+    "old_sessions_revoked": true,
+    "owner_assigns_admin": true,
+    "administrator_handles_request": true,
+    "member_cannot_read_queue": true,
+    "administrator_cannot_assign_roles": true,
+    "reset_link_single_use": true,
+    "reset_link_hidden_from_queue": true,
+    "registered_user_relogin": true,
+    "workspace_preserved": true,
+    "no_paid_research_started": true,
+    "temporary_admin_role_restored": true
+  },
+  "database": {
+    "counts": {
+      "registered_users": 2,
+      "runs": 2,
+      "models": 20,
+      "invocations": 82
+    },
+    "registered_role_counts": {
+      "member": 2
+    },
+    "used_links_have_no_token_hash": 1,
+    "audit_event_count": 5,
+    "restricted_database_grants_verified": true,
+    "schema": "0004_account_security",
+    "baseline_data_preserved": true
+  },
+  "browser": {
+    "recovery_form": true,
+    "password_settings": true,
+    "owner_user_roles": true,
+    "owner_is_existing_owner": true,
+    "mobile_password_width": 390,
+    "mobile_no_horizontal_overflow": true,
+    "screenshots": [
+      ".platform/password-recovery-form.jpg",
+      ".platform/account-password-settings.jpg",
+      ".platform/account-admin-roles.jpg",
+      ".platform/account-password-mobile.jpg"
+    ]
+  },
+  "backups": {
+    "before": "/opt/venture-lens/backups/20261118T111718Z",
+    "after": "/opt/venture-lens/backups/20261118T112801Z",
+    "location": "VPS only; no database/source download performed"
+  },
+  "constraints": [
+    "administrator verifies identity and delivers link manually",
+    "owner recovery requires server operator; administrators cannot reset owner",
+    "contact supplied in request is unverified",
+    "single VPS; scheduled off-host backups and alerts still pending"
+  ]
+}
