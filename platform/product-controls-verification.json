@@ -1,0 +1,116 @@
+{
+  "checked_at": "2026-11-18T21:41:21.678036+00:00",
+  "read_only": true,
+  "configuration": {
+    "version": 1,
+    "connection_mode": "default",
+    "key_configured": true
+  },
+  "access": {
+    "owner": 200,
+    "viewer": 403,
+    "member": 403
+  },
+  "owner_cannot_read_private_qa": true,
+  "run": {
+    "id": "f5eeff9f13964f82",
+    "status": "completed_with_gaps",
+    "counts": {
+      "passed": 1,
+      "rejected": 0,
+      "review": 3,
+      "error": 0,
+      "queued": 0,
+      "running": 0,
+      "waiting": 0,
+      "cancelled": 0
+    },
+    "calls": 16,
+    "tokens": 79240
+  },
+  "selection": {
+    "mode": "adaptive",
+    "sampling": "quick",
+    "found": 4,
+    "stop_reason": "depth_limit",
+    "coverage": "Источники предоставляют информацию о существующих B2B SaaS-решениях для малого бизнеса (CRM, управление проектами, биллинг), что позволяет сформировать гипотезы о продуктах и бизнес-моделях. Однако источники не содержат конкретных данных о канадском рынке, особенностях локализации, конкурентной среде в Канаде или финансовых метриках (ARPU, churn) для узкого сегмента малых сервисных компаний. Выборка покрывает общие функциональные требования (CRM, PM, Support), но не учитывает географические и регуляторные нюансы Канады, а также специфику «первого платежа в течение 90 дней» для данного узкого сегмента.",
+    "source_count": 5
+  },
+  "market": "Canada",
+  "models": [
+    "deepseek-v4-flash",
+    "qwen3.8-27b"
+  ],
+  "audit_statuses": {
+    "failed": 2,
+    "completed": 14
+  },
+  "input_hashes_verified": 16,
+  "effective_prompts_verified": 16,
+  "verifier_context_isolated": true,
+  "preferences": {
+    "onboarding_enabled": false,
+    "onboarding_seen_version": 2,
+    "onboarding_seen_sections": [
+      "overview",
+      "sources",
+      "agents",
+      "card_agents",
+      "new_research"
+    ]
+  },
+  "backend_source_revision": "revision-omitted",
+  "frontend_source_revision": "revision-omitted",
+  "images": {
+    "api": "venture-lens-api:product-revision-omitted",
+    "web": "venture-lens-web:product-revision-omitted"
+  },
+  "automated_checks": {
+    "postgresql": {
+      "passed": 106,
+      "skipped": 0,
+      "seconds": 28.24,
+      "provider": "controlled substitute",
+      "log": "/opt/venture-lens/product-controls-build.log"
+    },
+    "typescript": "passed",
+    "next_production_build": "passed on VPS",
+    "repository_invariants": "passed",
+    "user_facing_private_network_terms": "no matches in app TSX or authentication pages"
+  },
+  "browser": {
+    "observed": [
+      "automatic spotlight on overview and source library",
+      "new market form with Canada and quick depth, no quantity input",
+      "manual source saved and shown pending verification",
+      "agent and per-card conclusions with matching critic/verifier results",
+      "administrator settings version 1 saved with unchanged values",
+      "qwen3.8-27b probe successful after 02:30 local, 994 ms",
+      "deepseek-v4-flash probe successful after 02:30 local, 641 ms",
+      "disable auto guidance survives reload; manual reopening still works",
+      "390 px settings spotlight and readable tooltip",
+      "repeat manual guide inside card and evidence tab after final frontend deployment"
+    ],
+    "screenshots_private_local": [
+      ".platform/product-tour-first.jpg",
+      ".platform/product-tour-sources.jpg",
+      ".platform/product-tour-mobile.jpg",
+      ".platform/product-tour-agents.jpg"
+    ],
+    "remaining_visual_checks": [
+      "final Escape interaction, reopened copied market form and comparison guide not completed after Windows desktop access was lost",
+      "temporary 1280x900 viewport override could not be reset after browser access was lost"
+    ]
+  },
+  "manual_source_saved_in_private_qa": true,
+  "provider_quota": {
+    "before_0230_local": "two HTTP 403 failures retained in audit",
+    "after_0230_local": "both models responded; stopped research resumed and finished"
+  },
+  "scope": "New run is in a private QA workspace; main demonstration research was not rewritten.",
+  "server_backup": {
+    "backup_directory": "/opt/venture-lens/backups/20261118T214303Z",
+    "completed": true,
+    "files": 2
+  }
+}
