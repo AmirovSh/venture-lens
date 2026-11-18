@@ -58,11 +58,19 @@ def main():
     if not destination.exists():subprocess.run(['git','clone',str(bundle),str(destination)],check=True,capture_output=True)
     restored=subprocess.check_output(['git','rev-parse','HEAD'],cwd=destination).decode().strip()
     assert restored==head
+    # Publication is a separately verified receipt, never inferred from an origin alone.
+    proof_path=ROOT/'.platform/github-publication.json'
+    try:proof=json.loads(proof_path.read_text())
+    except (OSError,ValueError):proof={}
+    repository=proof.get('url','')
+    safe_repository=bool(re.fullmatch(r'https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+',repository))
+    published=bool(safe_repository and proof.get('head')==head and proof.get('remote_matches_local') is True)
     report={'head':head,'commit_count':int(git('rev-list','--count','HEAD')),'historical_blobs_scanned':blobs,
             'known_credentials_checked':len(secrets),'history_secret_scan_passed':True,'bundle_verified':True,
             'clean_clone_verified':True,'bytes':bundle.stat().st_size,
             'sha256':hashlib.file_digest(bundle.open('rb'),'sha256').hexdigest(),
-            'github_published':False,'github_blocker':'existing CLI authentication is invalid; login required'}
+            'github_repository':repository if safe_repository else None,'github_published':published,
+            'github_blocker':None if published else 'GitHub publication has not been verified for this commit'}
     (output/'repository-verification.json').write_text(json.dumps(report,indent=2)+'\n')
     print(json.dumps(report,indent=2))
 

@@ -27,7 +27,7 @@
 # Затем: k3s kubectl -n venture-lens-demo rollout restart deployment/corporate-llm
 ```
 
-Скрипт передаёт Secret через SSH stdin и не сохраняет расшифрованный локальный ключ. Профиль и пароль остаются также в исходной пользовательской папке. Дамп исследований не содержит Kubernetes Secrets: при восстановлении всего VPS их нужно внести отдельно из защищённого источника. Образ адаптера добавлен в подготовленную сборку/публикацию GitHub Actions; сами облачные Actions ещё не запускались.
+Скрипт передаёт Secret через SSH stdin и не сохраняет расшифрованный локальный ключ. Профиль и пароль остаются также в исходной пользовательской папке. Дамп исследований не содержит Kubernetes Secrets: при восстановлении всего VPS их нужно внести отдельно из защищённого источника. Образ адаптера добавлен в подготовленную сборку/публикацию GitHub Actions; первый облачный запуск доступен в [Actions](https://github.com/AmirovSh/venture-lens/actions).
 
 ## Платформа
 
@@ -51,7 +51,7 @@ API и worker используют общие лимиты провайдеро�
 ## GitOps и CI/CD
 
 
-GitHub Actions с проверками, fault-тестами, публикацией проверенных образов в GHCR и продвижением digest подготовлены в `.github/workflows`. **GitHub-репозиторий ещё не подключён, облачные Actions не запускались.** Для автоматических релизов нужно подключить репозиторий/registry, защиту ветки и переключить источник Argo CD. Production overlay содержит обязательные placeholders и не используется как готовая конфигурация.
+GitHub Actions с проверками, fault-тестами, публикацией проверенных образов в GHCR и продвижением digest подготовлены в `.github/workflows`. **Приватный [GitHub-репозиторий](https://github.com/AmirovSh/venture-lens) опубликован, облачные Actions запущены. Argo CD пока использует зеркало VPS.** Для прямых автоматических релизов из GitHub нужны проверенный registry, защита ветки и отдельное переключение источника Argo CD. Production overlay содержит обязательные placeholders и не используется как готовая конфигурация.
 
 Bootstrap: `platform/server/bootstrap.sh` → `build.sh` → `deploy.py` → `addons.py`. До запуска нужны проверенный SSH-ключ, исходники `/opt/venture-lens/source`, приватный `runtime.json` и Secret настроек SearXNG. Для публичного доступа после миграции API также нужен `platform/configure_public_demo.py`: он создаёт ограниченную роль БД и Secret авторизации. Пока авторизация не готова, публичный шлюз не пропускает запросы к приложению. `addons.py` использует официальные manifests версий из `platform/toolchain.json`, сохранённые на VPS как `keda-install.yaml` и `argocd-install.yaml`. Секреты исключены из Git bundle и Docker context.
 
