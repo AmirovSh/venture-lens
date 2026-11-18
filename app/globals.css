@@ -34,3 +34,31 @@
 @media(max-width:700px){.decision-summary{padding:20px;gap:16px;margin:19px 0}.decision-summary-main h2{font-size:20px}.summary-next{grid-template-columns:1fr}.summary-candidate strong{font-size:12px}.launch-brief{padding:17px}.launch-heading{flex-direction:column;gap:11px}.launch-heading h3{font-size:18px}.decision-verdict{max-width:none}.launch-grid{grid-template-columns:1fr}.launch-grid>div{padding:15px}.launch-grid>div>strong{font-size:19px}.evidence-task{padding:16px}.evidence-task dl>div{grid-template-columns:1fr;gap:3px}.task-heading{align-items:flex-start}.task-heading>span:last-child{font-size:9px}.reassess-panel{flex-direction:column;align-items:stretch}.reassess-panel .button{justify-content:center}.workspace-section-title{flex-direction:column;gap:10px}.workspace-section-title h3{font-size:17px}.pilot-grid{grid-template-columns:1fr}.pilot-grid .span-two{grid-column:auto}.pilot-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}.guide-content{padding:20px}.guide-header{padding:20px 20px 0}.guide-content h2{font-size:22px}.guide-items{gap:16px;margin:22px 0}.guide-trigger span{display:none}.topbar{padding-left:16px;padding-right:16px}.topbar-right{gap:12px}.breadcrumbs{gap:6px;min-width:0}.breadcrumbs strong{max-width:125px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.breadcrumbs>span{display:none}.comparison-insight{margin:0 18px 18px;padding:15px}.original-analysis{padding:15px}.card-tabs{padding-left:16px;padding-right:16px}.form-actions{flex-wrap:wrap}}
 
 .guide-intro,.guide-items p{color:#64755a}.guide-disable small,.guide-once{color:#657659}.guide-once{font-size:10px}.guide-progress button{height:22px;background:transparent;position:relative}.guide-progress button.current,.guide-progress button.done{background:transparent}.guide-progress button:before{content:"";position:absolute;left:0;right:0;top:9px;height:5px;border-radius:4px;background:#e7ecdf}.guide-progress button.current:before{background:#769d5e}.guide-progress button.done:before{background:#c1d5b1}
+/* Keep the model header and pilot action within the visible dialog. */
+.model-card-modal{display:flex;flex-direction:column;max-height:calc(100dvh - 90px)}
+.model-card-modal>.card-header,.model-card-modal>.card-tabs{flex-shrink:0}
+.model-card-modal>.card-tabs{overflow-y:hidden}
+.model-card-modal>.card-content{flex:1;min-height:0;max-height:none;scroll-padding-bottom:130px}
+.pilot-form>fieldset{padding-bottom:20px}
+.pilot-action-bar{position:sticky;bottom:-28px;z-index:4;display:flex;align-items:center;justify-content:space-between;gap:16px;margin:0 -28px;padding:14px 28px;background:#fff;border-top:1px solid #dce4d4;box-shadow:0 -8px 20px #253c2510}
+.pilot-action-bar>.button{flex-shrink:0}
+.pilot-action-feedback{flex:1;min-width:0;color:#65765a;font-size:11px;line-height:1.6}
+.pilot-action-feedback p{margin:0}
+.pilot-action-feedback .form-error,.pilot-action-feedback .form-feedback{padding:8px 10px}
+.source-filters{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) auto;align-items:end;gap:12px 16px;padding:0 21px 20px}
+.source-filters label{display:grid;gap:7px;font-size:11px;font-weight:550;color:#52664b;min-width:0}
+.source-filters select{width:100%;min-height:42px;border:1px solid #dce4d4;border-radius:7px;padding:9px 11px;background:#fff;color:#33412e;font-size:12px}
+.source-filter-summary{grid-column:1/-1;display:flex;align-items:center;gap:8px;font-size:12px;color:#52664b}
+.source-filter-help{grid-column:1/-1;margin:0;font-size:11px;line-height:1.7;color:#748077}
+.source-companies{display:block;margin-top:7px;font-size:10px;line-height:1.7;color:#65765a}
+@media(max-width:640px){
+ .model-card-modal{max-height:calc(100dvh - 32px)}
+ .model-card-modal>.card-header{padding:18px;gap:12px}
+ .model-card-modal>.card-header h2{font-size:19px;line-height:1.4}
+ .model-card-modal>.card-content{scroll-padding-bottom:160px}
+ .pilot-action-bar{bottom:-20px;margin:0 -18px;padding:12px 18px;flex-wrap:wrap;gap:9px}
+ .pilot-action-bar>.button{width:100%;justify-content:center}
+ .pilot-action-feedback{flex-basis:100%}
+ .source-filters{grid-template-columns:minmax(0,1fr);padding:0 16px 18px;gap:12px}
+ .source-filters>.button{justify-self:start}
+}
