@@ -1,0 +1,178 @@
+{
+  "verified_at": "2026-11-18T12:47:56.567743+00:00",
+  "scope": "original assignment completion; real persisted main-workspace research on VPS",
+  "research": [
+    {
+      "id": "eb6e76e6e99b4298",
+      "status": "completed_with_gaps",
+      "cards": 10,
+      "counts": {
+        "review": 9,
+        "passed": 1
+      },
+      "calls": 53,
+      "tokens": 265740,
+      "passports": 105,
+      "complete_passports": true,
+      "verifier_contract": "3.0",
+      "consistency_checks": 10,
+      "conflict_findings": 0,
+      "prior_verification_preserved": true,
+      "scores": [
+        19.0
+      ],
+      "all_invocation_hashes_valid": true,
+      "invocations": 53,
+      "agent_packet_isolation_valid": true
+    },
+    {
+      "id": "6ff7268691c2469a",
+      "status": "completed_with_gaps",
+      "cards": 10,
+      "counts": {
+        "review": 10
+      },
+      "calls": 50,
+      "tokens": 226456,
+      "passports": 113,
+      "complete_passports": true,
+      "verifier_contract": "3.0",
+      "consistency_checks": 10,
+      "conflict_findings": 0,
+      "prior_verification_preserved": true,
+      "scores": [],
+      "all_invocation_hashes_valid": true,
+      "invocations": 50,
+      "agent_packet_isolation_valid": true
+    }
+  ],
+  "totals": {
+    "cards": 20,
+    "passports": 218,
+    "invocations": 103
+  },
+  "checks": {
+    "postgres_tests": {
+      "passed": 78,
+      "skipped": 0,
+      "isolated_database": true,
+      "external_llm_mocked": true,
+      "warning": "Starlette TestClient deprecation"
+    },
+    "next_production_build": true,
+    "typescript": true,
+    "repository_invariants": true,
+    "kustomize_render": true,
+    "actionlint": true,
+    "browser_real_ui_reviewed": true,
+    "real_rejected_candidates": 0,
+    "rejection_reason_and_conflict_guard_verified_by_tests": true
+  },
+  "video": {
+    "file": "venture-lens-demo.mp4",
+    "duration_seconds": 170.5,
+    "resolution": "1920x1080",
+    "fps": 24,
+    "audio": "Russian synthetic narration; silent closing card",
+    "captions": "burned in; SRT also supplied",
+    "scenes": [
+      {
+        "scene": 1,
+        "title": "От идеи к первой оплате",
+        "start": 0.0,
+        "duration": 14.42,
+        "screen": "overview"
+      },
+      {
+        "scene": 2,
+        "title": "Честный результат исследования",
+        "start": 14.42,
+        "duration": 17.57,
+        "screen": "overview"
+      },
+      {
+        "scene": 3,
+        "title": "Настройте условия запуска",
+        "start": 31.99,
+        "duration": 13.49,
+        "screen": "new-research"
+      },
+      {
+        "scene": 4,
+        "title": "Одинаковая структура карточек",
+        "start": 45.48,
+        "duration": 15.6,
+        "screen": "card-overview"
+      },
+      {
+        "scene": 5,
+        "title": "Паспорт каждого утверждения",
+        "start": 61.08,
+        "duration": 17.81,
+        "screen": "evidence"
+      },
+      {
+        "scene": 6,
+        "title": "Критика и независимая проверка",
+        "start": 78.89,
+        "duration": 19.3,
+        "screen": "risks"
+      },
+      {
+        "scene": 7,
+        "title": "Изоляция видна в аудите",
+        "start": 98.19,
+        "duration": 11.16,
+        "screen": "audit"
+      },
+      {
+        "scene": 8,
+        "title": "Сравните модели по одним правилам",
+        "start": 109.35,
+        "duration": 18.77,
+        "screen": "comparison"
+      },
+      {
+        "scene": 9,
+        "title": "От гипотезы к эксперименту",
+        "start": 128.12,
+        "duration": 15.86,
+        "screen": "plan"
+      },
+      {
+        "scene": 10,
+        "title": "Сохранение работы и границы надёжности",
+        "start": 143.98,
+        "duration": 14.54,
+        "screen": "settings"
+      },
+      {
+        "scene": 11,
+        "title": "Что развивать дальше",
+        "start": 158.52,
+        "duration": 12.02,
+        "screen": "overview"
+      }
+    ],
+    "bytes": 5327825,
+    "sha256": "bf63f31d4cd110059f98c2459760e695143215cdf6a73b28cf3191c68b0136fb",
+    "source": "real current service screenshots; edited walkthrough",
+    "full_decode_verified": true,
+    "contact_sheet": ".platform/video/video-contact-sheet.jpg"
+  },
+  "delivery": {
+    "git_bundle": "deliverables/venture-lens.bundle",
+    "proof": "deliverables/repository-verification.json",
+    "history_scan_and_clean_clone_script": "scripts/prepare_submission.py",
+    "github_published": false,
+    "github_actions_executed_remotely": false,
+    "github_blocker": "existing CLI authorization invalid; new sign-in required"
+  },
+  "limitations": [
+    "only one admitted real candidate; multi-item qualified ranking verified with fixtures",
+    "index is not calibrated probability",
+    "AI interpretation and legal eligibility need human review",
+    "sources reused for last recheck, not refreshed",
+    "single VPS is not HA; scheduled off-host backup and alerts pending"
+  ]
+}

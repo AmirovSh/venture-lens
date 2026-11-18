@@ -118,9 +118,10 @@
   },
   "limitations": [
     "single physical host; database and S3 not HA",
-    "all real research candidates require evidence review; no qualified ranking",
+    "latest real research: 1 admitted and 9 review; index is not calibrated probability",
     "GitHub Actions/GHCR prepared but not executed remotely",
     "scheduled off-host backups, alerts, OIDC and load tests pending",
     "full worker fault suite verified previously on isolated local cluster; real VPS worker scaling 1 -> 2 -> 1 observed with autonomous research"
-  ]
+  ],
+  "current_specification_report": "platform/specification-verification.json"
 }
