@@ -36,6 +36,7 @@ jobs:
       - run: |
           python scripts/install_platform_tools.py
           .tools/kubectl kustomize deploy/overlays/local > /tmp/local.yaml
+          .tools/kubectl kustomize deploy/overlays/demo > /tmp/demo.yaml
           .tools/kubectl kustomize deploy/overlays/production > /tmp/production.yaml
           if ! grep -q REPLACE_ /tmp/production.yaml; then python platform/preflight.py /tmp/production.yaml; fi
   recovery:

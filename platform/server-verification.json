@@ -1,0 +1,83 @@
+{
+  "verified_at": "2026-11-18T07:12:37.223123+00:00",
+  "scope": "private single-node VPS demo; temporary workstation LLM tunnel; no public ingress or GitHub publication",
+  "server": {
+    "ip": "91.108.213.165",
+    "os": "Ubuntu 24.04",
+    "vcpus": 4,
+    "ram_gb": 8,
+    "disk_gb": 60,
+    "k3s": "v1.37.2+k3s1",
+    "argocd": "v3.6.1",
+    "keda": "v2.21.1"
+  },
+  "research": {
+    "id": "6ff7268691c2469a",
+    "status": "completed_with_gaps",
+    "done": 10,
+    "counts": {
+      "passed": 0,
+      "rejected": 0,
+      "review": 10,
+      "error": 0,
+      "queued": 0,
+      "running": 0,
+      "waiting": 0,
+      "cancelled": 0
+    },
+    "calls": 40,
+    "tokens": 173656,
+    "decision_saved": true,
+    "snapshot_api_checks": 3
+  },
+  "checks": {
+    "real_corporate_llm_from_api_pod": true,
+    "searxng_real_query_results": 35,
+    "api_recreation": {
+      "passed": true,
+      "new_pod": "api-9b789cb9f-q7t7t",
+      "run_id": "6ff7268691c2469a",
+      "models_preserved": 10,
+      "run_status": "running"
+    },
+    "gitops_self_heal": {
+      "passed": true,
+      "self_heal": "SEARCH_REQUESTS_PER_MINUTE restored 19 -> 20 from Git"
+    },
+    "k3s_restart_helpers_and_app_recovered": true,
+    "corporate_llm_after_k3s_restart": true,
+    "argocd": {
+      "sync": "Synced",
+      "health": "Healthy",
+      "source": "private read-only VPS Git mirror; not GitHub"
+    },
+    "keda_postgresql_metric_ready": true,
+    "api_hpa_cpu_metric_ready": true,
+    "backup": {
+      "backup_directory": ".platform/server-backups/20261118T070931Z",
+      "remote_directory": "/opt/venture-lens/backups/20261118T070931Z",
+      "files_verified": 2,
+      "source_objects_verified": 298,
+      "isolated_restore_verified": true,
+      "restored_rows": {
+        "runs": 1,
+        "models": 10,
+        "invocations": 40
+      }
+    },
+    "ufw_public_allow_tcp": [
+      22
+    ],
+    "kubernetes_secrets_encryption_enabled": true,
+    "repository_invariants_passed": true,
+    "workflow_actionlint_passed": true
+  },
+  "limitations": [
+    "single physical host; database and S3 not HA",
+    "LLM requires Windows workstation, corporate network and approved SSH tunnel",
+    "all real research candidates require evidence review; no qualified ranking",
+    "GitHub Actions/GHCR prepared but not executed remotely",
+    "scheduled off-host backups, alerts, public TLS/auth and load tests pending",
+    "full worker fault/scaling suite verified previously on isolated local cluster, not fully rerun on VPS"
+  ]
+}

@@ -21,6 +21,7 @@ def main():
     # Source bundles are checked out by SHA; a bare clone of detached HEAD has
     # no branch for Argo CD to resolve. Always create/update the desired ref.
     run(['git','-C',str(mirror),'fetch',str(ROOT/'source'),'+HEAD:refs/heads/master'])
+    run(['git','-C',str(mirror),'symbolic-ref','HEAD','refs/heads/master'])
     service('venture-lens-git',f'/usr/bin/git -c safe.directory=* daemon --reuseaddr --base-path={ROOT}/git --export-all --listen=127.0.0.1 --port=9418 {ROOT}/git','Read-only private GitOps source')
     repo='git://127.0.0.1:9418/repo.git'
     apply({'apiVersion':'argoproj.io/v1alpha1','kind':'AppProject','metadata':{'name':'venture-lens','namespace':'argocd'},'spec':{'sourceRepos':[repo],'destinations':[{'server':'https://kubernetes.default.svc','namespace':NS}],'clusterResourceWhitelist':[{'group':'','kind':'Namespace'}]}})

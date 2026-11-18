@@ -15,6 +15,7 @@ def service(name,command,description,user='root'):
 Description={description}
 After=k3s.service network-online.target
 Requires=k3s.service
+PartOf=k3s.service
 [Service]
 User={user}
 ExecStart={command}
@@ -26,7 +27,7 @@ ProtectSystem=full
 [Install]
 WantedBy=multi-user.target
 ''')
-    run(['systemctl','daemon-reload']);run(['systemctl','enable','--now',name])
+    run(['systemctl','daemon-reload']);run(['systemctl','enable',name]);run(['systemctl','restart',name])
 
 def main():
     # Only pod/service networks can reach host-side private adapters.

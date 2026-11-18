@@ -6,9 +6,10 @@ test "$(id -u)" = 0
 . /etc/os-release
 test "$ID" = ubuntu
 test "$VERSION_ID" = 24.04
-install -d -m 700 /opt/venture-lens /var/log/venture-lens
+install -d -m 755 /opt/venture-lens
+install -d -m 700 /var/log/venture-lens
 apt-get update
-apt-get install -y ca-certificates curl ufw fail2ban unattended-upgrades python3 git jq
+apt-get install -y ca-certificates curl ufw fail2ban unattended-upgrades python3 python3-yaml git jq
 cat >/etc/ssh/sshd_config.d/00-venture-lens.conf <<'SSH'
 PermitRootLogin prohibit-password
 PubkeyAuthentication yes
