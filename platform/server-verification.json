@@ -1,5 +1,5 @@
 {
-  "verified_at": "2026-11-18T08:49:08.993912+00:00",
+  "verified_at": "2026-11-18T09:58:09.961337+00:00",
   "server": {
     "ip": "91.108.213.165",
     "os": "Ubuntu 24.04",
@@ -65,13 +65,15 @@
       }
     },
     "ufw_public_allow_tcp": [
-      22
+      22,
+      80,
+      443
     ],
     "kubernetes_secrets_encryption_enabled": true,
     "repository_invariants_passed": true,
     "workflow_actionlint_passed": true,
     "unit_tests": {
-      "passed": 32,
+      "passed": 46,
       "skipped": 1,
       "skip_reason": "PostgreSQL-only concurrency test; original local PostgreSQL is not running"
     },
@@ -86,13 +88,24 @@
         "models": 20,
         "invocations": 82
       }
+    },
+    "public_demo": {
+      "url": "https://91.108.213.165",
+      "tls_verified": true,
+      "roles": [
+        "owner",
+        "viewer"
+      ],
+      "session_store": "PostgreSQL",
+      "auth_replicas": 2,
+      "report": "platform/public-verification.json"
     }
   },
   "limitations": [
     "single physical host; database and S3 not HA",
     "all real research candidates require evidence review; no qualified ranking",
     "GitHub Actions/GHCR prepared but not executed remotely",
-    "scheduled off-host backups, alerts, public TLS/auth and load tests pending",
+    "scheduled off-host backups, alerts, OIDC/user isolation and load tests pending",
     "full worker fault suite verified previously on isolated local cluster; real VPS worker scaling 1 -> 2 -> 1 observed with autonomous research"
   ]
 }

@@ -1,0 +1,72 @@
+{
+  "verified_at": "2026-11-18T09:58:09.961337+00:00",
+  "scope": "public authenticated single-VPS demo, shared workspace",
+  "external": {
+    "url": "https://91.108.213.165",
+    "tls_verified": true,
+    "certificate_expires": "Nov 25 00:33:24 2026 GMT",
+    "certificate_san": [
+      [
+        "IP Address",
+        "91.108.213.165"
+      ]
+    ],
+    "http_redirects_https": true,
+    "unauthenticated_api_blocked": true,
+    "owner_and_guest_login": true,
+    "viewer_read_export_only": true,
+    "owner_reaches_backend_validation": true,
+    "logout_revokes_cookie": true,
+    "session_survives_auth_restart": true,
+    "runs_preserved": 2
+  },
+  "internal": {
+    "unauthenticated_api_blocked": true,
+    "owner_login": true,
+    "viewer_login": true,
+    "viewer_writes_blocked": true,
+    "owner_write_and_origin_checks": true,
+    "export": true,
+    "logout_revokes_session": true,
+    "restricted_database_role": true,
+    "persisted_runs": 2
+  },
+  "tests": {
+    "passed": 46,
+    "skipped": 1,
+    "skip_reason": "PostgreSQL-only concurrency unit test; live PostgreSQL access/session checks passed separately"
+  },
+  "browser": {
+    "desktop_login_guest_and_owner": true,
+    "guest_controls_disabled": true,
+    "owner_research_form": true,
+    "mobile_workspace_width": 390,
+    "mobile_navigation": true,
+    "late_additional_browser_check": "IAB proxy failed; independent external HTTPS verification subsequently passed"
+  },
+  "backup": {
+    "backup_directory": ".platform/server-backups/20261118T095428Z",
+    "remote_directory": "/opt/venture-lens/backups/20261118T095428Z",
+    "files_verified": 2,
+    "source_objects_verified": 535,
+    "isolated_restore_verified": true,
+    "restored_rows": {
+      "runs": 2,
+      "models": 20,
+      "invocations": 82
+    }
+  },
+  "secrets_in_git_or_images": false,
+  "caddy": {
+    "version": "2.11.9",
+    "digest": "sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0",
+    "ip_certificate_profile": "shortlived",
+    "persistent_storage": true
+  },
+  "constraints": [
+    "one physical VPS, single TLS edge",
+    "one shared demonstration workspace; no per-user research isolation",
+    "GitHub Actions prepared but not run remotely",
+    "scheduled external backups, monitoring and load tests pending"
+  ]
+}

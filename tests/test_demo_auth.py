@@ -108,6 +108,18 @@ def test_login_rejects_cross_origin_and_escapes_reflected_username(access):
     assert '&lt;script&gt;' in response.text
 
 
+def test_database_failure_denies_access_without_leaking_details(access, monkeypatch):
+    from sqlalchemy.exc import OperationalError
+    client, store, _, forwarded = access
+    def unavailable(*_):
+        raise OperationalError('private database configuration', {}, RuntimeError('must-not-leak'))
+    monkeypatch.setattr(store, 'identity', unavailable)
+    response = client.get('/api/runs')
+    assert response.status_code == 503 and response.headers['Retry-After'] == '5'
+    assert 'must-not-leak' not in response.text and 'private database' not in response.text
+    assert not forwarded
+
+
 @pytest.mark.parametrize('target', ['https://attacker.invalid', '//attacker.invalid', '/%2f/attacker.invalid', '/\\attacker.invalid', '/%0d%0aLocation:evil', '/auth/logout'])
 def test_open_redirect_targets_are_rejected(target):
     assert safe_next(target) == '/'

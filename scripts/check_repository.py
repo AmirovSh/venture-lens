@@ -10,6 +10,7 @@ def main():
     for name in paths:
         path=ROOT/name
         if not path.is_file():continue
+        if Path(name).parts[0] in ('.platform','.tools'):raise RuntimeError('Private workstation state is tracked: '+name)
         if path.name in ('.env','.env.local','kubeconfig','secrets.json','argocd-admin.txt'):raise RuntimeError('Private runtime file is tracked: '+name)
         if path.suffix in ('.pem','.key','.p12','.pfx'):raise RuntimeError('Certificate/key file is tracked: '+name)
         if (b'-----BEGIN '+b'PRIVATE KEY-----') in path.read_bytes():raise RuntimeError('Private key material is tracked: '+name)
