@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from backend import db
 from backend.app import app
-from backend.decision_support import model_support,research_summary,main_risk
+from backend.decision_support import model_support,research_summary,main_risk,hypothesis_name
 from backend.schemas import PilotInput,LaunchEstimate
 from backend.settings import policy
 from test_pipeline import store,seed,assessment
@@ -70,6 +70,47 @@ def test_similar_hypotheses_are_flagged_without_dropping_companies():
     result=research_summary(models,policy())
     assert len(result['possible_duplicates'])==1 and len(models)==2
     assert result['priorities']==[]
+
+
+def test_legacy_company_name_becomes_a_hypothesis_without_rewriting_database(store):
+    ready_card(store)
+    with store.begin() as s:s.get(db.Model,'model').name='Example'
+    with TestClient(app) as client:
+        card=client.get('/api/runs/run').json()['models'][0]
+        assert card['name']=='SaaS' and card['original_name']=='Example' and card['company']=='Example'
+    with store() as s:assert s.get(db.Model,'model').name=='Example'
+    assert hypothesis_name('Our distinct product','Example',{'product':'Other description'})=='Our distinct product'
+
+
+def test_screen_payload_is_compact_but_streamed_export_preserves_full_history(store):
+    ready_card(store)
+    with store.begin() as s:
+        model=s.get(db.Model,'model');data=db.read(model.data)
+        data['sources'][0]['text']='Large preserved source. '*2000
+        data['analysis_history']=[{'data':{'old_source':'Saved historical material. '*2000}}]
+        model.data=db.dump(data)
+    with TestClient(app) as client:
+        screen=client.get('/api/runs/run').json()['models'][0]['data']
+        assert len(screen['sources'][0]['text'])==300 and screen['sources'][0]['preview']
+        assert 'analysis_history' not in screen and screen['history_available']
+        response=client.get('/api/runs/run/export');full=response.json()['models'][0]['data']
+        assert len(full['sources'][0]['text'])>30000
+        assert len(full['analysis_history'][0]['data']['old_source'])>30000
+        assert response.headers['content-type'].startswith('application/json')
+
+
+def test_export_concurrency_is_bounded_and_released(store):
+    from backend.app import export_limiter
+    ready_card(store)
+    assert export_limiter.acquire(blocking=False)
+    try:
+        with TestClient(app) as client:
+            response=client.get('/api/runs/run/export')
+            assert response.status_code==429 and response.headers['Retry-After']=='5'
+    finally:export_limiter.release()
+    with TestClient(app) as client:
+        assert client.get('/api/runs/run/export').status_code==200
+        assert client.get('/api/runs/run/export').status_code==200
 
 
 def test_task_materials_persist_export_and_never_change_admission(store):

@@ -1,14 +1,17 @@
 from contextlib import asynccontextmanager
 import time
+import json
+import threading
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse,StreamingResponse
+from starlette.background import BackgroundTask
 from sqlalchemy import select, update, text,func
 from sqlalchemy.exc import SQLAlchemyError
 from .execution import DependencyUnavailable
 from . import settings
 from .db import init, Session, Run, Model, Job, Event, Invocation, ProviderState,EvidenceAction,Pilot,uid, dump, read
 from .schemas import ResearchInput, Decision, EvidenceActionInput, PilotInput
-from .decision_support import model_support, research_summary, tasks_for
+from .decision_support import model_support, research_summary, tasks_for, hypothesis_name
 from .auth_context import verify_identity
 
 @asynccontextmanager
@@ -60,32 +63,47 @@ def member_active_limit(s, request, excluding=None):
     if s.scalar(query.limit(1)):
         raise HTTPException(429,'У вас уже есть активное исследование. Дождитесь завершения или остановите его.')
 
-def serialize_model(m,detail=True):
+def compact_source(source):
+    return {**source,'text':source.get('text','')[:300],'preview':True}
+
+
+def serialize_model(m,detail=True,compact=False):
     result={k:getattr(m,k) for k in ['id','run_id','name','company','status','stage','score','score_upper','coverage','decision','note','error']}
-    if detail:result['data']=read(m.data)
+    if detail:
+        data=read(m.data)
+        if compact:
+            original=data
+            data={key:value for key,value in data.items() if key in ('candidate','assessment','critique','verification','scoring','consistency','launch_brief','launch_brief_provenance')}
+            for key in ('sources','verification_sources'):data[key]=[compact_source(item) for item in original.get(key,[])]
+            data['history_available']=bool(original.get('analysis_history') or original.get('verification_history'))
+        result['data']=data
     return result
 
 def serialize_run(s,r,detail=False):
-    models=s.scalars(select(Model).where(Model.run_id==r.id)).all()
-    counts={k:sum(m.status==k for m in models) for k in ['passed','rejected','review','error','queued','running','waiting','cancelled']}
+    headers=s.execute(select(Model.id,Model.status).where(Model.run_id==r.id)).all()
+    counts={k:sum(status==k for _,status in headers) for k in ['passed','rejected','review','error','queued','running','waiting','cancelled']}
     conf=read(r.settings)
-    result={'id':r.id,'title':r.title,'status':r.status,'created':r.created,'updated':r.updated,'settings':{k:v for k,v in conf.items() if k!='discovery_sources'},'calls':r.calls,'tokens':r.tokens,'error':r.error,'counts':counts,'total':len(models),'done':sum(counts[k] for k in ['passed','rejected','review','error'])}
+    result={'id':r.id,'title':r.title,'status':r.status,'created':r.created,'updated':r.updated,'settings':{k:v for k,v in conf.items() if k!='discovery_sources'},'calls':r.calls,'tokens':r.tokens,'error':r.error,'counts':counts,'total':len(headers),'done':sum(counts[k] for k in ['passed','rejected','review','error'])}
     result.update(waiting_reason=r.waiting_reason,active_seconds=r.active_seconds,degraded=bool(r.degraded))
     if detail:
-        result['models']=[serialize_model(m) for m in models];result['policy']=read(r.policy)
-        result['discovery_sources']=conf.get('discovery_sources',[])
-        model_ids=[m.id for m in models]
+        result['models']=[];result['policy']=read(r.policy)
+        result['discovery_sources']=[compact_source(item) for item in conf.get('discovery_sources',[])]
+        model_ids=[id for id,_ in headers]
         actions={}
         for item in s.scalars(select(EvidenceAction).where(EvidenceAction.model_id.in_(model_ids))):
             actions.setdefault(item.model_id,{})[item.task_key]={'status':item.status,'owner':item.owner,'note':item.note,'source_urls':read(item.source_urls),'version':item.version,'updated':item.updated}
         pilots={item.model_id:{**read(item.data),'version':item.version,'updated':item.updated} for item in s.scalars(select(Pilot).where(Pilot.model_id.in_(model_ids)))}
-        for row,model in zip(result['models'],models):
+        for model in s.scalars(select(Model).where(Model.run_id==r.id).execution_options(yield_per=1)):
+            row=serialize_model(model,compact=True)
             row['support']=model_support(model,row['data'],conf,result['policy'],actions.get(model.id),pilots.get(model.id))
+            row['original_name']=row['name']
+            row['name']=hypothesis_name(row['name'],row['company'],row['support']['brief'])
             remaining=r.calls+5<=result['policy']['limits']['max_llm_calls'] and r.tokens+30000<=result['policy']['limits']['max_total_tokens']
             inactive=r.status in ('completed','completed_with_gaps','partial')
             pilot_active=pilots.get(model.id,{}).get('status')=='active'
             row['support']['can_reassess']=inactive and remaining and not pilot_active
             row['support']['reassess_reason']='Сначала остановите активный эксперимент.' if pilot_active else 'Дождитесь завершения текущих этапов.' if not inactive else 'Бюджет LLM исследования исчерпан; создайте новое исследование.' if not remaining else None
+            result['models'].append(row)
         result['summary']=research_summary(result['models'],result['policy'],active=r.status in ('queued','running','waiting'))
     return result
 
@@ -302,8 +320,53 @@ def reassess_model(id:str,request:Request):
         s.add(Event(run_id=run.id,model_id=id,stage='reassess',message='Повторный отбор с новыми материалами. Предыдущая версия сохранена.',payload=dump({'additional_sources':len(kept['additional_source_urls'])})))
     return {'status':'queued'}
 
+export_limiter=threading.BoundedSemaphore(1)
+
+
+class ExportPermit:
+    def __init__(self):
+        self.lock=threading.Lock();self.released=False
+    def release(self):
+        with self.lock:
+            if not self.released:self.released=True;export_limiter.release()
+
+
+def export_chunks(id,request,permit):
+    encoder=json.JSONEncoder(ensure_ascii=False,separators=(',',':'),allow_nan=False)
+    def pieces(s):
+        run=get_run(s,id,request);result=serialize_run(s,run,True)
+        models={m['id']:m for m in result.pop('models')}
+        result['discovery_sources']=read(run.settings).get('discovery_sources',[])
+        yield '{'
+        for key,value in result.items():
+            yield json.dumps(key)+':'
+            yield from encoder.iterencode(value)
+            yield ','
+        yield '"models":['
+        first=True
+        for model in s.scalars(select(Model).where(Model.run_id==id).execution_options(yield_per=1)):
+            if not first:yield ','
+            first=False
+            row=serialize_model(model)
+            row.update(name=models[model.id]['name'],original_name=models[model.id]['original_name'],support=models[model.id]['support'])
+            yield from encoder.iterencode(row)
+        yield ']}'
+    try:
+        with Session() as s:
+            if s.bind.dialect.name=='postgresql':s.connection(execution_options={'isolation_level':'REPEATABLE READ'})
+            else:s.execute(text('BEGIN'))
+            buffer=[];length=0
+            for part in pieces(s):
+                buffer.append(part);length+=len(part)
+                if length>=32768:yield ''.join(buffer).encode('utf-8');buffer=[];length=0
+            if buffer:yield ''.join(buffer).encode('utf-8')
+    finally:permit.release()
+
+
 @app.get('/api/runs/{id}/export')
 def export(id:str,request:Request):
-    with Session() as s:
-        r=get_run(s,id,request);result=serialize_run(s,r,True)
-    return JSONResponse(result,headers={'Content-Disposition':f'attachment; filename="venture-lens-{id}.json"'})
+    with Session() as s:get_run(s,id,request)
+    if not export_limiter.acquire(blocking=False):raise HTTPException(429,'Другой экспорт уже выполняется. Повторите через несколько секунд.',headers={'Retry-After':'5'})
+    permit=ExportPermit()
+    return StreamingResponse(export_chunks(id,request,permit),media_type='application/json',
+        headers={'Content-Disposition':f'attachment; filename="venture-lens-{id}.json"'},background=BackgroundTask(permit.release))

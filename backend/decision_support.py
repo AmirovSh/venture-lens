@@ -74,6 +74,14 @@ def model_support(model,data,conditions,policy,actions=None,pilot=None):
 STOPWORDS={'для','на','и','с','по','в','the','for','and','of','a','an','to','with','b2b','saas','сервис','платформа','software','platform','service'}
 
 
+def hypothesis_name(original,company,brief):
+    if re.sub(r'\W','',original.casefold())!=re.sub(r'\W','',company.casefold()):return original
+    text=' '.join(brief.get('product','').split())
+    if not text:return original
+    if len(text)<=100:return text
+    return text[:98].rsplit(' ',1)[0]+'…'
+
+
 def hypothesis_signature(model):
     data=model['data'];a=data.get('assessment',{});brief=model['support']['brief']
     explicit=data.get('candidate',{}).get('business_model_key')
