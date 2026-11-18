@@ -1,3 +1,4 @@
 # Administrative workstation only; never added to runtime images.
 paramiko==5.1.0
 PySocks==1.7.1
+cryptography==50.0.2
