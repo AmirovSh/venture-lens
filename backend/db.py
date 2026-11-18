@@ -1,7 +1,7 @@
 import json
 import time
 import uuid
-from sqlalchemy import create_engine, Column, String, Text, Integer, Float, ForeignKey, UniqueConstraint, event as sa_event
+from sqlalchemy import create_engine, Column, String, Text, Integer, Float, ForeignKey, UniqueConstraint, Index, event as sa_event
 from sqlalchemy.orm import declarative_base, sessionmaker
 from .settings import DATABASE_URL, ROOT, DATA
 
@@ -69,6 +69,7 @@ class Job(Base):
 
 class Event(Base):
     __tablename__ = 'events'
+    __table_args__ = (Index('ix_events_run_id_id','run_id','id'),)
     id = Column(Integer, primary_key=True, autoincrement=True)
     run_id = Column(String, ForeignKey('runs.id'), nullable=False, index=True)
     model_id = Column(String, nullable=True)
@@ -87,6 +88,7 @@ class Invocation(Base):
     provider = Column(String,nullable=True)
     prompt_version = Column(String, default='1.1')
     prompt_text = Column(Text,nullable=True)
+    connection_version = Column(Integer,nullable=True)
     input_hash = Column(String)
     input = Column(Text)
     output = Column(Text, nullable=True)

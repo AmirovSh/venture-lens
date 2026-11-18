@@ -123,3 +123,5 @@
 }
 
 .modal-guidebar{flex-shrink:0;display:flex;justify-content:flex-end;padding:10px 20px 0}.modal-guidebar .guide-trigger{font-size:11px}
+
+.event-log-pagination{padding:0 24px 24px;display:flex;justify-content:center}.connection-rotation fieldset{border:0;padding:0;margin:0;display:grid;gap:15px;min-width:0}.connection-rotation p{font-size:12px;line-height:1.8}.connection-rotation .rotation-confirmation{display:flex;align-items:flex-start;gap:10px;line-height:1.7}.rotation-confirmation input{width:16px;min-width:16px;height:16px;margin-top:3px}.connection-rotation .form-actions{flex-wrap:wrap}

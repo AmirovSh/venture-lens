@@ -109,19 +109,33 @@ def save(body,actor):
 
 def snapshot(session=None):
     version,config=current(session)
-    return {'version':version,'models':copy.deepcopy(config['models']),'prompts':copy.deepcopy(config['prompts'])}
+    return {'version':version,'connection_version':version,'server_id':server_id(config),
+            'models':copy.deepcopy(config['models']),'prompts':copy.deepcopy(config['prompts'])}
 
 def configured():
     _,config=current()
     return bool(settings.BASE_URL and settings.API_KEY) if config['connection_mode']=='default' else bool(config['base_url'] and config['encrypted_key'])
 
-def connection(snapshot_value):
-    version=snapshot_value['version']
-    if not version:return defaults()
-    with db.Session() as s:
-        row=s.get(db.ServiceConfiguration,version)
+def server_id(config):
+    # Bind credentials to the complete API root, including its tenant/path and TLS mode.
+    url=(settings.BASE_URL if config['connection_mode']=='default' else config['base_url']).rstrip('/')
+    parsed=urlsplit(url)
+    authority=(parsed.hostname or '').lower()+(':'+str(parsed.port) if parsed.port else '')
+    canonical=parsed.scheme.lower()+'://'+authority+parsed.path
+    return hashlib.sha256((config['connection_mode']+'\n'+canonical).encode()).hexdigest()
+
+def connection(snapshot_value,session=None):
+    version=snapshot_value.get('connection_version',snapshot_value['version'])
+    if session is None:
+        with db.Session() as s:return connection(snapshot_value,s)
+    if not version:config=defaults()
+    else:
+        row=session.get(db.ServiceConfiguration,version)
         if not row:raise ConfigurationError('Версия настроек сервера моделей не найдена')
-        return db.read(row.data)
+        config=db.read(row.data)
+    if snapshot_value.get('server_id') and snapshot_value['server_id']!=server_id(config):
+        raise ConfigurationError('Адрес сервера исследования изменился. Создайте новое исследование для другого сервера.')
+    return config
 
 def prepare_research(body,session):
     config=body.model_dump()

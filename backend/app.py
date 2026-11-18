@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 import time
 import json
 import threading
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Query
 from fastapi.responses import JSONResponse,StreamingResponse
 from fastapi.exceptions import RequestValidationError
 from starlette.background import BackgroundTask
@@ -205,11 +205,27 @@ def events(id:str,request:Request,after:int=0):
         rows=s.scalars(select(Event).where(Event.run_id==id,Event.id>after).order_by(Event.id).limit(500))
         return [{k:getattr(e,k) for k in ['id','at','stage','message','model_id']}|{'payload':read(e.payload)} for e in rows]
 
+@app.get('/api/runs/{id}/events/page')
+def event_page(id:str,request:Request,before:int|None=Query(default=None,ge=1),after:int|None=Query(default=None,ge=0),limit:int=Query(default=100,ge=1,le=200)):
+    if before is not None and after is not None:raise HTTPException(422,'Используйте только одно направление загрузки журнала')
+    with Session() as s:
+        get_run(s,id,request)
+        query=select(Event).where(Event.run_id==id)
+        if before is not None:query=query.where(Event.id<before)
+        if after is not None:query=query.where(Event.id>after)
+        rows=list(s.scalars(query.order_by(Event.id.asc() if after is not None else Event.id.desc()).limit(limit+1)))
+        more=len(rows)>limit;rows=rows[:limit]
+        if after is None:rows.reverse()
+        return {'events':[{k:getattr(e,k) for k in ['id','at','stage','message','model_id']}|{'payload':read(e.payload)} for e in rows],
+                'total':s.scalar(select(func.count()).select_from(Event).where(Event.run_id==id)),
+                'has_more':more,'before':rows[0].id if rows and more and after is None else None,
+                'after':rows[-1].id if rows else after}
+
 @app.get('/api/runs/{id}/audit')
 def audit(id:str,request:Request):
     with Session() as s:
         get_run(s,id,request)
-        return [{k:getattr(x,k) for k in ['id','model_id','role','model','prompt_version','input_hash','tokens','status','created']}|{'input':read(x.input),'output':x.output,'prompt':x.prompt_text} for x in s.scalars(select(Invocation).where(Invocation.run_id==id).order_by(Invocation.created))]
+        return [{k:getattr(x,k) for k in ['id','model_id','role','model','prompt_version','connection_version','input_hash','tokens','status','created']}|{'input':read(x.input),'output':x.output,'prompt':x.prompt_text} for x in s.scalars(select(Invocation).where(Invocation.run_id==id).order_by(Invocation.created))]
 
 @app.post('/api/runs/{id}/cancel')
 def cancel(id:str,request:Request):
