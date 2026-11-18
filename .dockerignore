@@ -11,6 +11,7 @@ tests
 
 .tools
 .platform
+deliverables
 *.pem
 *.key
 *.pfx

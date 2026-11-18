@@ -14,3 +14,4 @@ test-results/
 .platform/
 .coverage
 htmlcov/
+deliverables/

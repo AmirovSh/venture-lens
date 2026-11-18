@@ -23,13 +23,14 @@ def test_rejection_event_contains_human_reason_and_evidence_ids(store, monkeypat
 
 def test_verified_conflict_removes_persisted_score_without_rewriting_original_screening(store,monkeypatch):
     seed(store)
+    independent=source('s2');independent['text']='Operators of this proposed activity must obtain their own financial licence before serving a first customer.'
     def invoke(run_id,role,packet,*args,**kwargs):
         if role=='screening':return assessment()
         if role=='critic':return {'risks':[{'id':'r1','title':'Licence required','statement':'This activity requires our own licence','impact':'high','factual':True,'search_query':'licence','confidence':'high','method':'primary_source','source_id':'s1','quote':source()['text'],'source_date':None}]}
         if role=='verification_search':return {'queries':['independent company licence']}
         assert set(packet)=={'company','claims','sources'}
-        return {'checks':[{'claim_id':'r1','status':'supported','explanation':'Independent source supports licence requirement','source_id':'s2','quote':source()['text'],'source_date':None,'confidence':'high','criterion_impacts':[{'criterion_id':'legal_online','effect':'contradicts','reason':'The proposed activity needs our own licence before the first client'}]}]}
-    monkeypatch.setattr(pipeline,'invoke',invoke);monkeypatch.setattr(pipeline,'collect',lambda *args,**kwargs:[source('s2')])
+        return {'checks':[{'claim_id':'r1','status':'supported','explanation':'Independent source supports licence requirement','source_id':'s2','quote':independent['text'],'source_date':None,'confidence':'high','criterion_impacts':[{'criterion_id':'legal_online','effect':'contradicts','reason':'The proposed activity needs our own licence before the first client'}]}]}
+    monkeypatch.setattr(pipeline,'invoke',invoke);monkeypatch.setattr(pipeline,'collect',lambda *args,**kwargs:[independent])
     pipeline.process_model('model')
     with store() as s:
         model=s.get(db.Model,'model');data=db.read(model.data)
@@ -90,3 +91,14 @@ def test_recheck_keeps_history_sources_and_resets_fencing_for_completed_with_gap
         assert run.status=='queued' and run.generation==1 and job.epoch==8 and job.attempts==0
         assert data['verification_history'][0]['result']=={'checks':[]}
         assert data['verification_sources'][0]['id']=='v' and data['reuse_verification_sources']
+
+
+def test_ci_wire_provider_matches_current_llm_response_schemas():
+    import importlib.util,json
+    from pathlib import Path
+    from backend.schemas import Assessment,Critique,Verification,SearchPlan,Discovery
+    spec=importlib.util.spec_from_file_location('ci_spec_fixtures',Path(__file__).parents[1]/'platform/fixtures.py')
+    fixtures=importlib.util.module_from_spec(spec);spec.loader.exec_module(fixtures)
+    responses=json.loads(fixtures.resources('isolated-test','test-image')[0]['data']['responses.json'])
+    for role,schema in [('screening',Assessment),('critic',Critique),('verifier',Verification),('verification_search',SearchPlan),('discovery',Discovery)]:
+        schema.model_validate(responses[role])
