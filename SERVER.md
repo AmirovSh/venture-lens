@@ -1,6 +1,6 @@
 # Venture Lens на VPS
 
-Проверено 18 ноября 2026 года. VPS `91.108.213.165`: Ubuntu 24.04, 4 vCPU, 8 ГБ RAM, 60 ГБ NVMe. Сервис работает в K3s, namespace `venture-lens-demo`. Публичный сайт с авторизацией и HTTPS по IP уже включён; домен не требуется. Подробности — в PUBLIC_DEMO.md.
+Проверено 18 ноября 2026 года. VPS `91.108.213.165`: Ubuntu 24.04, 4 vCPU, 8 ГБ RAM, 60 ГБ NVMe. Сервис работает в K3s, namespace `venture-lens-demo`. Публичный сайт с авторизацией и HTTPS доступен на бесплатном поддомене DuckDNS. Подробности — в PUBLIC_DEMO.md.
 
 ## Доступ
 
@@ -39,7 +39,7 @@
 | SeaweedFS S3 4.54 | 1 StatefulSet, постоянный том; источники по SHA256 |
 | SearXNG | 1 реплика, image закреплён digest, внутренняя сеть |
 | Demo access | 2 реплики, общие PostgreSQL-сессии/лимиты, owner/viewer |
-| Public edge | Caddy 2.11.9, HTTPS по IP, постоянное хранилище сертификатов |
+| Public edge | Caddy 2.11.9, HTTPS на DuckDNS-домене, постоянное хранилище сертификатов |
 | K3s | v1.37.2+k3s1, systemd, шифрование Secrets включено |
 | Argo CD / KEDA | v3.6.1 / v2.21.1 |
 

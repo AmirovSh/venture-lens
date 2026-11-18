@@ -90,7 +90,7 @@
       }
     },
     "public_demo": {
-      "url": "https://91.108.213.165",
+      "url": "https://venture-lens.duckdns.org",
       "tls_verified": true,
       "roles": [
         "owner",
@@ -98,7 +98,8 @@
       ],
       "session_store": "PostgreSQL",
       "auth_replicas": 2,
-      "report": "platform/public-verification.json"
+      "report": "platform/public-verification.json",
+      "legacy_ip_redirects_to_domain": true
     }
   },
   "limitations": [

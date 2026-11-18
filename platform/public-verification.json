@@ -1,17 +1,19 @@
 {
-  "verified_at": "2026-11-18T09:58:09.961337+00:00",
+  "verified_at": "2026-11-18T10:20:02.664571+00:00",
   "scope": "public authenticated single-VPS demo, shared workspace",
   "external": {
-    "url": "https://91.108.213.165",
+    "url": "https://venture-lens.duckdns.org",
+    "checked_at": "2026-11-18T10:17:40.701449+00:00",
     "tls_verified": true,
-    "certificate_expires": "Nov 25 00:33:24 2026 GMT",
+    "certificate_expires": "Feb 16 09:18:14 2027 GMT",
     "certificate_san": [
       [
-        "IP Address",
-        "91.108.213.165"
+        "DNS",
+        "venture-lens.duckdns.org"
       ]
     ],
     "http_redirects_https": true,
+    "legacy_ip_redirects_to_domain_preserving_path_and_query": true,
     "unauthenticated_api_blocked": true,
     "owner_and_guest_login": true,
     "viewer_read_export_only": true,
@@ -42,7 +44,11 @@
     "owner_research_form": true,
     "mobile_workspace_width": 390,
     "mobile_navigation": true,
-    "late_additional_browser_check": "IAB proxy failed; independent external HTTPS verification subsequently passed"
+    "late_additional_browser_check": "IAB proxy failed; independent external HTTPS verification subsequently passed",
+    "named_domain_guest_login": true,
+    "named_domain_guest_controls_disabled": true,
+    "named_domain_url": "https://venture-lens.duckdns.org/",
+    "named_domain_screenshot": ".platform/public-demo-domain.jpg"
   },
   "backup": {
     "backup_directory": ".platform/server-backups/20261118T095428Z",
@@ -61,12 +67,39 @@
     "version": "2.11.9",
     "digest": "sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0",
     "ip_certificate_profile": "shortlived",
-    "persistent_storage": true
+    "persistent_storage": true,
+    "domain_certificate_automatic_renewal": true
   },
   "constraints": [
     "one physical VPS, single TLS edge",
     "one shared demonstration workspace; no per-user research isolation",
     "GitHub Actions prepared but not run remotely",
     "scheduled external backups, monitoring and load tests pending"
-  ]
+  ],
+  "previous_ip_verification": {
+    "url": "https://91.108.213.165",
+    "tls_verified": true,
+    "certificate_expires": "Nov 25 00:33:24 2026 GMT",
+    "certificate_san": [
+      [
+        "IP Address",
+        "91.108.213.165"
+      ]
+    ],
+    "http_redirects_https": true,
+    "unauthenticated_api_blocked": true,
+    "owner_and_guest_login": true,
+    "viewer_read_export_only": true,
+    "owner_reaches_backend_validation": true,
+    "logout_revokes_cookie": true,
+    "session_survives_auth_restart": true,
+    "runs_preserved": 2
+  },
+  "dns": {
+    "name": "venture-lens.duckdns.org",
+    "A": "91.108.213.165",
+    "system_and_google_resolver_verified": true,
+    "account": "user-owned DuckDNS",
+    "api_token_copied_to_vps": false
+  }
 }
