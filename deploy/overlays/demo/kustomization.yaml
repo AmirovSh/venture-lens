@@ -6,6 +6,29 @@ resources:
 - ../../infrastructure/single-node
 patches:
 - target:
+    kind: HorizontalPodAutoscaler
+    name: api
+  patch: |-
+    - op: replace
+      path: /spec/minReplicas
+      value: 1
+    - op: replace
+      path: /spec/maxReplicas
+      value: 2
+- target:
+    kind: ScaledObject
+    name: worker
+  patch: |-
+    - op: replace
+      path: /spec/minReplicaCount
+      value: 1
+    - op: replace
+      path: /spec/maxReplicaCount
+      value: 2
+    - op: replace
+      path: /spec/fallback/replicas
+      value: 1
+- target:
     kind: Namespace
     name: venture-lens
   patch: "- op: replace\n  path: /metadata/name\n  value: venture-lens-demo"
@@ -31,3 +54,4 @@ replicas:
   count: 1
 components:
 - ../../components/search
+- ../../components/autoscaling

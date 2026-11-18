@@ -20,6 +20,8 @@ SSH
 sshd -t
 systemctl reload ssh
 ufw allow 22/tcp comment 'Venture Lens SSH'
+ufw allow from 10.42.0.0/16 to any comment 'K3s pod network'
+ufw allow from 10.43.0.0/16 to any comment 'K3s service network'
 ufw default deny incoming
 ufw default allow outgoing
 ufw --force enable
@@ -28,7 +30,6 @@ systemctl enable --now fail2ban
 install -d -m 700 /etc/rancher/k3s
 cat >/etc/rancher/k3s/config.yaml <<'K3S'
 write-kubeconfig-mode: "0600"
-bind-address: 127.0.0.1
 disable:
   - traefik
   - servicelb
