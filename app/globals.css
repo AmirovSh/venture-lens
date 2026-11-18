@@ -121,3 +121,5 @@
  .model-limit-grid{grid-template-columns:1fr}.model-settings .research-form{padding:0 16px 20px}
  .model-settings-actions{flex-direction:column;align-items:stretch;gap:12px;padding:13px 16px}.model-settings-actions>.button{justify-content:center}
 }
+
+.modal-guidebar{display:flex;justify-content:flex-end;padding:10px 20px 0}.modal-guidebar .guide-trigger{font-size:11px}
