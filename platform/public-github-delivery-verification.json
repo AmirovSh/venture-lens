@@ -1,0 +1,196 @@
+{
+  "repository": {
+    "url": "https://github.com/AmirovSh/venture-lens",
+    "visibility": "public",
+    "anonymous_http": 200,
+    "default_branch": "master"
+  },
+  "gitops": {
+    "source": {
+      "path": "deploy/overlays/demo",
+      "repoURL": "https://github.com/AmirovSh/venture-lens.git",
+      "targetRevision": "master"
+    },
+    "revision": "revision-omitted",
+    "sync": "Synced",
+    "health": "Healthy",
+    "legacy_git_mirror": "disabled",
+    "api_source_hashes": {
+      "files_checked": 40,
+      "mismatches": []
+    },
+    "web_build_inputs_match_deployed_source": true,
+    "ready_pods": 9,
+    "images": [
+      "venture-lens-api:fix-revision-omitted",
+      "venture-lens-web:fix-revision-omitted"
+    ],
+    "automatic_followup_commit_observed": true
+  },
+  "site": {
+    "checked_at": "2026-11-18T23:01:10.979030+00:00",
+    "login_page_http": 200,
+    "unauthorized_api_http": 401,
+    "owner": {
+      "main_research_count": 2,
+      "researches": [
+        {
+          "id": "eb6e76e6e99b4298",
+          "status": "completed_with_gaps",
+          "counts": {
+            "passed": 2,
+            "rejected": 0,
+            "review": 8,
+            "error": 0,
+            "queued": 0,
+            "running": 0,
+            "waiting": 0,
+            "cancelled": 0
+          }
+        },
+        {
+          "id": "6ff7268691c2469a",
+          "status": "completed_with_gaps",
+          "counts": {
+            "passed": 0,
+            "rejected": 0,
+            "review": 10,
+            "error": 0,
+            "queued": 0,
+            "running": 0,
+            "waiting": 0,
+            "cancelled": 0
+          }
+        }
+      ]
+    },
+    "frontend": {
+      "authorized_html_http": 200,
+      "static_assets_checked": 8,
+      "all_static_assets_http": 200
+    },
+    "health": "ok",
+    "models": {
+      "discovery": {
+        "status": "ok",
+        "model": "qwen3.8-27b",
+        "configuration_version": 1,
+        "latency_ms": 975,
+        "notice": "Тест использовал один запрос сервера моделей."
+      },
+      "critic": {
+        "status": "ok",
+        "model": "deepseek-v4-flash",
+        "configuration_version": 1,
+        "latency_ms": 696,
+        "notice": "Тест использовал один запрос сервера моделей."
+      }
+    },
+    "viewer": {
+      "main_research_count": 2,
+      "researches": [
+        {
+          "id": "eb6e76e6e99b4298",
+          "status": "completed_with_gaps",
+          "counts": {
+            "passed": 2,
+            "rejected": 0,
+            "review": 8,
+            "error": 0,
+            "queued": 0,
+            "running": 0,
+            "waiting": 0,
+            "cancelled": 0
+          }
+        },
+        {
+          "id": "6ff7268691c2469a",
+          "status": "completed_with_gaps",
+          "counts": {
+            "passed": 0,
+            "rejected": 0,
+            "review": 10,
+            "error": 0,
+            "queued": 0,
+            "running": 0,
+            "waiting": 0,
+            "cancelled": 0
+          }
+        }
+      ]
+    },
+    "workspace_isolation": true,
+    "viewer_mutations_forbidden": true
+  },
+  "source_snapshots": [
+    {
+      "model_id": "0a28df1cb7e0425b",
+      "snapshot_http": 200,
+      "hash_matches": true
+    },
+    {
+      "model_id": "6c3f8b2561694b06",
+      "snapshot_http": 200,
+      "hash_matches": true
+    }
+  ],
+  "ci": {
+    "status": "completed",
+    "source_revision": "revision-omitted",
+    "url": "https://github.com/AmirovSh/venture-lens/actions",
+    "postgres_tests": {
+      "passed": 123,
+      "skipped": 0,
+      "seconds": 42.28
+    },
+    "previous_failure": "GitHub Actions shallow checkout left the disposable GitOps mirror without its lab ref; recovery checkout now fetches full history and mirror code checks the exact ref.",
+    "regression_tests": "two real Git clone tests passed locally and in CI",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "id": 135209598184,
+        "name": "checks",
+        "status": "completed",
+        "conclusion": "success",
+        "active_steps": [],
+        "failed_steps": []
+      },
+      {
+        "id": 135210503428,
+        "name": "recovery",
+        "status": "completed",
+        "conclusion": "success",
+        "active_steps": [],
+        "failed_steps": []
+      },
+      {
+        "id": 135214538001,
+        "name": "publish",
+        "status": "completed",
+        "conclusion": "success",
+        "active_steps": [],
+        "failed_steps": []
+      }
+    ],
+    "recovery_pass_log": [
+      "2026-11-18T23:24:34.8833932Z PASS full_cycle_and_persisted_score",
+      "2026-11-18T23:24:38.2730023Z PASS api_recreated_database_and_s3_artifacts_preserved",
+      "2026-11-18T23:25:47.2930426Z PASS killed_worker_lease_takeover",
+      "2026-11-18T23:25:51.1873577Z PASS llm_outage_wait_and_automatic_recovery",
+      "2026-11-18T23:25:58.9312657Z PASS database_outage_live_200_ready_503",
+      "2026-11-18T23:26:07.3523643Z PASS database_pvc_recovery_preserves_results",
+      "2026-11-18T23:26:32.0293050Z PASS s3_outage_503_and_pvc_recovery",
+      "2026-11-18T23:26:51.5760384Z PASS two_workers_claim_distinct_jobs",
+      "2026-11-18T23:28:22.6324473Z PASS KEDA PostgreSQL metric: 1 -> 2 -> 1 workers",
+      "2026-11-18T23:29:39.0242620Z PASS Argo CD restored the declared deployment from Git"
+    ]
+  },
+  "browser": "Desktop access unavailable; no visual pass claimed",
+  "data_origins": {
+    "source_code_and_deployment_manifests": "GitHub",
+    "runtime_code": "built container images declared in Git",
+    "research_and_accounts": "PostgreSQL",
+    "source_snapshots": "object storage",
+    "credentials": "server Secrets; excluded from Git"
+  }
+}
