@@ -114,9 +114,15 @@ def deploy():
     print('Local Kubernetes application: http://127.0.0.1:3210')
 
 def sync_mirror():
+    shallow=run(['git','rev-parse','--is-shallow-repository'],capture_output=True,text=True).stdout.strip()
+    if shallow=='true':raise RuntimeError('The GitOps lab needs full Git history. Use actions/checkout fetch-depth: 0 or git fetch --unshallow.')
     mirror=STATE/'git/repo.git';mirror.parent.mkdir(parents=True,exist_ok=True)
     if not mirror.exists():run(['git','init','--bare',str(mirror)])
-    run(['git','-C',str(mirror),'fetch',str(ROOT),'HEAD:refs/heads/lab']);run(['git','-C',str(mirror),'symbolic-ref','HEAD','refs/heads/lab'])
+    run(['git','-C',str(mirror),'fetch',str(ROOT),'+HEAD:refs/heads/lab'])
+    expected=run(['git','rev-parse','HEAD'],capture_output=True,text=True).stdout.strip()
+    actual=run(['git','-C',str(mirror),'rev-parse','refs/heads/lab'],capture_output=True,text=True).stdout.strip()
+    if actual!=expected:raise RuntimeError('GitOps mirror did not receive the checked-out commit')
+    run(['git','-C',str(mirror),'symbolic-ref','HEAD','refs/heads/lab'])
 
 def gitops():
     manifest=STATE/'argocd-install.yaml'
