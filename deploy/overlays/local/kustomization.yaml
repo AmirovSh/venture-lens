@@ -3,8 +3,7 @@ kind: Kustomization
 namespace: venture-lens-lab
 resources:
 - ../../base
-- infrastructure.yaml
-- bucket.yaml
+- ../../infrastructure/single-node
 patches:
 - target:
     kind: Namespace
