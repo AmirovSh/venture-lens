@@ -19,7 +19,12 @@ def main():
     if not (STATE / 'server.json').is_file():
         raise SystemExit('Missing ignored .platform/server.json SSH configuration')
     mode=json.loads((STATE/'server.json').read_text()).get('llm_mode','workstation-tunnel')
-    if mode=='workstation-tunnel':start_bridge()
+    if mode=='workstation-tunnel':
+        config=json.loads((STATE/'server.json').read_text())
+        if config.get('llm_tunnel_managed'):
+            from workstation_llm import ensure
+            ensure()
+        else:start_bridge()
     if not listening(3210):
         process = subprocess.Popen(
             [str(ROOT / '.venv/Scripts/python.exe'), str(ROOT / 'platform/demo_tunnel.py')],

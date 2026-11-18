@@ -8,20 +8,40 @@ from urllib.request import Request,build_opener,ProxyHandler
 from urllib.error import HTTPError,URLError
 import os
 
+UPSTREAM='http://127.0.0.1:18112'
+
 class Proxy(BaseHTTPRequestHandler):
+    def reply(self,status,body,retry=None):
+        self.send_response(status)
+        self.send_header('Content-Type','application/json')
+        self.send_header('Content-Length',str(len(body)))
+        if retry:self.send_header('Retry-After',retry)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path not in ('/live','/ready'):self.send_error(404);return
+        # Confirms the tunnel reaches the Windows process; not an LLM inference.
+        try:
+            with build_opener(ProxyHandler({})).open(UPSTREAM+'/live',timeout=3) as response:
+                self.reply(response.status,response.read())
+        except (URLError,TimeoutError,OSError):
+            self.reply(503,b'{"error":"demo_tunnel_unavailable"}','10')
+
     def do_POST(self):
         if self.path!='/v1/chat/completions':self.send_error(404);return
-        length=int(self.headers.get('Content-Length','0'))
+        try:length=int(self.headers.get('Content-Length','0'))
+        except ValueError:self.send_error(400);return
         if not 0<length<=500000:self.send_error(413);return
         data=self.rfile.read(length)
-        request=Request('http://127.0.0.1:18112'+self.path,data=data,headers={'Authorization':self.headers.get('Authorization',''),'Content-Type':'application/json'})
+        request=Request(UPSTREAM+self.path,data=data,headers={'Authorization':self.headers.get('Authorization',''),'Content-Type':'application/json'})
         try:
             with build_opener(ProxyHandler({})).open(request,timeout=160) as response:
-                body=response.read();self.send_response(response.status);self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(body)
+                self.reply(response.status,response.read())
         except HTTPError as error:
-            self.send_response(error.code);self.send_header('Retry-After',error.headers.get('Retry-After','10'));self.end_headers();self.wfile.write(b'{"error":"gateway_unavailable"}')
-        except (URLError,TimeoutError):
-            self.send_response(503);self.send_header('Retry-After','10');self.end_headers();self.wfile.write(b'{"error":"demo_tunnel_unavailable"}')
+            self.reply(error.code,b'{"error":"gateway_unavailable"}',error.headers.get('Retry-After','10'))
+        except (URLError,TimeoutError,OSError):
+            self.reply(503,b'{"error":"demo_tunnel_unavailable"}','10')
     def log_message(self,*_):pass
 
 if __name__=='__main__':ThreadingHTTPServer((os.environ.get('POD_GATEWAY','127.0.0.1'),18113),Proxy).serve_forever()

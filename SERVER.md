@@ -1,5 +1,6 @@
 # Venture Lens на VPS
 
+
 Проверено 18 ноября 2026 года. VPS `91.108.213.165`: Ubuntu 24.04, 4 vCPU, 8 ГБ RAM, 60 ГБ NVMe. Сервис работает в K3s, namespace `venture-lens-demo`. Публичный сайт с авторизацией и HTTPS доступен на бесплатном поддомене DuckDNS. Подробности — в PUBLIC_DEMO.md.
 
 ## Доступ
