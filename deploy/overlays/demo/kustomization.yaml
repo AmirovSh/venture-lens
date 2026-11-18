@@ -29,3 +29,5 @@ replicas:
   count: 1
 - name: web
   count: 1
+components:
+- ../../components/search
