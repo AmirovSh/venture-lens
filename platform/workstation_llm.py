@@ -26,7 +26,7 @@ opener = build_opener(ProxyHandler({}))
 
 def get_status(path='/ready'):
     try:
-        with opener.open('http://127.0.0.1:8113' + path, timeout=2) as response:
+        with opener.open('http://127.0.0.1:8113' + path, timeout=4) as response:
             value = json.load(response)
             return value if value.get('service') == status['service'] else None
     except (OSError, ValueError):
@@ -46,13 +46,17 @@ class Health(BaseHTTPRequestHandler):
         if self.path not in ('/live', '/ready'):
             self.send_error(404)
             return
-        ready = status['connected'] and bridge_alive()
-        payload = json.dumps({**status, 'bridge_alive': bridge_alive()}).encode()
+        alive = bridge_alive()
+        ready = status['connected'] and alive
+        payload = json.dumps({**status, 'bridge_alive': alive}).encode()
         self.send_response(200 if self.path == '/live' or ready else 503)
         self.send_header('Content-Type', 'application/json')
         self.send_header('Content-Length', str(len(payload)))
         self.end_headers()
-        self.wfile.write(payload)
+        try:
+            self.wfile.write(payload)
+        except ConnectionError:
+            pass
 
     def log_message(self, *_):
         pass
