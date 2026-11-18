@@ -1,4 +1,4 @@
-version: "2.0"
+version: "3.0"
 audit_review_models: true
 minimum_analogue_usd: 300000000
 discovery_urls:

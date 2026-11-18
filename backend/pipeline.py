@@ -1,10 +1,13 @@
 import hashlib
+import copy
 import time
 from .db import Session, Run, Model, Job, Invocation, dump, read, emit, uid
 from .schemas import Discovery, Assessment, Critique, Verification, SearchPlan
 from .evidence import collect, fetch, grounded, normalize, financial_quote_matches
 from .llm import invoke, Cancelled
 from .execution import assert_owner,current,draining,DependencyUnavailable
+from .passports import normalize_data, provenance_for
+from .consistency import reconcile
 
 TERMINAL={'passed','rejected','review','error'}
 
@@ -17,7 +20,9 @@ def guard(run_id):
 
 def save_model(model_id,data,**values):
     with Session.begin() as s:
-        m=s.get(Model,model_id);assert_owner(s,m.run_id);m.data=dump(data)
+        m=s.get(Model,model_id);run=assert_owner(s,m.run_id)
+        normalize_data(data,provenance_for(s,model_id),run.created)
+        m.data=dump(data)
         for k,v in values.items():setattr(m,k,v)
 
 def source_errors(run_id,model_id=None):
@@ -160,7 +165,8 @@ def process_model(model_id):
     statuses={g['status'] for g in assessment['gates']}
     if 'reject' in statuses:
         save_model(model_id,data,status='rejected',stage='completed')
-        emit(run_id,'rejected','Модель отклонена обязательными фильтрами',model_id,{'criteria':[g['id'] for g in assessment['gates'] if g['status']=='reject']});return
+        rejected=[{'criterion_id':g['id'],'reason':g['reason'],'claim_ids':g['claim_ids']} for g in assessment['gates'] if g['status']=='reject']
+        emit(run_id,'rejected','Модель отклонена: '+'; '.join(item['criterion_id']+': '+item['reason'] for item in rejected),model_id,{'criteria':[item['criterion_id'] for item in rejected],'rejections':rejected});return
     provisional='review' in statuses
     if provisional and not pol.get('audit_review_models',False):
         save_model(model_id,data,status='review',stage='completed')
@@ -176,13 +182,17 @@ def process_model(model_id):
             'Для суждений метод model_judgment или human_required. search_query — нейтральный запрос для независимого поиска факта.',model_id,max_tokens=8000)
         save_model(model_id,data,stage='verification')
     guard(run_id)
+    if data.get('verification') and data['verification'].get('contract_version')!='3.0':
+        data.setdefault('verification_history',[]).append({'at':time.time(),'result':data.pop('verification'),
+                                                          'sources':data.get('verification_sources',[]),'queries':data.get('verification_queries',[])})
+        data['reuse_verification_sources']=True
     if 'verification' not in data:
         emit(run_id,'verification','Фактчекер проверяет отдельные тезисы, не видя оценок и вердикта критика',model_id)
         risks=data['critique']['risks']
         # Whitelist: no critic title, severity, confidence, verdict, history or original citations.
         claims=[{'claim_id':x['id'],'statement':x['statement'],'factual':x['factual']} for x in risks]
         factual=[x for x in risks if x['factual']]
-        verified_sources=[]
+        verified_sources=data.get('verification_sources',[])
         if factual:
             if 'verification_queries' not in data:
                 plan=invoke(run_id,'verification_search',{'company':candidate['company'],'claims':claims},SearchPlan,
@@ -190,7 +200,8 @@ def process_model(model_id):
                     'Извлекай проверяемые факты из составного тезиса отдельно от прогноза. Ищи подтверждения и опровержения. '
                     'Пример: Company pricing implementation onboarding. Не используй длинные цитаты целиком и не доверяй тезису заранее.',model_id,max_tokens=1500)
                 data['verification_queries']=plan['queries'];save_model(model_id,data,stage='verification')
-            try:verified_sources=collect(data['verification_queries'],pol['limits']['max_sources_per_model'],source_errors(run_id,model_id))
+            try:
+                if not verified_sources and not data.get('reuse_verification_sources'):verified_sources=collect(data['verification_queries'],pol['limits']['max_sources_per_model'],source_errors(run_id,model_id))
             except (Cancelled,DependencyUnavailable):raise
             except Exception:emit(run_id,'source_warning','Независимый поиск недоступен; проверка помечается как неподтверждённая',model_id)
         data['verification_sources']=verified_sources
@@ -198,7 +209,11 @@ def process_model(model_id):
             'Независимо проверь каждый claims по sources. Ты не видишь автора тезиса, его оценки, уверенности и вердикта. '
             'Не соглашайся автоматически: ищи опровержения и область применимости. Без достаточного источника — unknown. '
             'Для factual=false — judgment: прогноз не проверяется цитатой. supported/refuted/partial только с точной цитатой. '
-            'Источник из поискового фрагмента недостаточен для supported. checks: ровно один на каждый claim_id. Даты не угадывай.',model_id,max_tokens=3500)
+            'Источник из поискового фрагмента недостаточен для supported. checks: ровно один на каждый claim_id. Даты не угадывай. '
+            'criterion_impacts: перечисли только обязательные условия, которым прямо противоречит подтверждённый факт (contradicts) '
+            'или для которых он создаёт существенное неразрешённое противоречие (uncertain). Иначе пустой список. '
+            'Длинные продажи и низкий индекс сами по себе не нарушают эти условия. Не делай выводов о лицензиях нашей модели из одной лишь лицензии компании-аналога. '
+            'Обязательные условия: '+dump(pol['criteria']),model_id,max_tokens=5000)
         checks={x['claim_id']:x for x in result['checks']}
         validated=[]
         for claim in claims:
@@ -213,8 +228,14 @@ def process_model(model_id):
             elif check['status']!='unknown' and (not check['grounded'] or not source or source['origin']=='search_snippet'):
                 check['status']='unknown';check['explanation']+=' Цитата полной страницы не подтверждена сервером.'
             validated.append(check)
-        data['verification']={'checks':validated}
+        data['verification']={'checks':validated,'contract_version':'3.0'}
         save_model(model_id,data,stage='scoring')
+    data.setdefault('screening_snapshot',copy.deepcopy(assessment))
+    findings=reconcile(data,pol)
+    provisional=any(g['status']=='review' for g in assessment['gates'])
+    if findings and not data.get('consistency_event_emitted'):
+        emit(run_id,'consistency','Модель направлена на проверку: независимые доказательства противоречат обязательным условиям',model_id,{'findings':findings})
+        data['consistency_event_emitted']=True
     # Scores reflect the predeclared rubric; risk checks are separate, never silently rewrite history.
     low,high,coverage=calculate(assessment['dimensions'],pol['weights'])
     penalties=pol.get('risk_penalties',{})

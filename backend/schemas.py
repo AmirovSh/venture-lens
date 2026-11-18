@@ -86,6 +86,11 @@ class Risk(Strict):
 class Critique(Strict):
     risks: list[Risk] = Field(min_length=1, max_length=3)
 
+class CriterionImpact(Strict):
+    criterion_id: str
+    effect: Literal['contradicts', 'uncertain']
+    reason: str
+
 class Check(Strict):
     claim_id: str
     status: Literal['supported', 'refuted', 'partial', 'unknown', 'judgment']
@@ -94,6 +99,7 @@ class Check(Strict):
     quote: str | None
     source_date: str | None
     confidence: Literal['low', 'medium', 'high']
+    criterion_impacts: list[CriterionImpact] = Field(max_length=5)
 
 class Verification(Strict):
     checks: list[Check]

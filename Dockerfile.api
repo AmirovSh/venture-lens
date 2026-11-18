@@ -6,6 +6,7 @@ RUN pip install --no-cache-dir -r requirements.lock.txt
 COPY backend backend
 COPY config config
 COPY migrations migrations
+COPY scripts/recheck.py scripts/recheck.py
 COPY alembic.ini .
 RUN mkdir -p /app/data && useradd --uid 10001 --create-home app && chown -R app:app /app
 USER app
