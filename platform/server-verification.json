@@ -123,5 +123,6 @@
     "scheduled off-host backups, alerts, OIDC and load tests pending",
     "full worker fault suite verified previously on isolated local cluster; real VPS worker scaling 1 -> 2 -> 1 observed with autonomous research"
   ],
-  "current_specification_report": "platform/specification-verification.json"
+  "current_specification_report": "platform/specification-verification.json",
+  "current_decision_workspace_report": "platform/decision-workspace-verification.json"
 }

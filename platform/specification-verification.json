@@ -209,5 +209,6 @@
     "latest_server_only_snapshot": "/opt/venture-lens/backups/20261118T124948Z",
     "snapshot_files": 2,
     "snapshot_restore_tested_for_this_snapshot": false
-  }
+  },
+  "current_decision_workspace_report": "platform/decision-workspace-verification.json"
 }

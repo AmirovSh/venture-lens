@@ -1,0 +1,345 @@
+{
+  "verified_at": "2026-11-18T18:28:43.151050+00:00",
+  "scope": "Owner decision workspace and onboarding, local implementation and live single-node VPS deployment",
+  "images": {
+    "api_worker_auth": "venture-lens-api:decision-revision-omitted",
+    "web": "venture-lens-web:decision-revision-omitted"
+  },
+  "checks": {
+    "postgresql_suite": {
+      "passed": 96,
+      "skipped": 0,
+      "seconds": 25.58,
+      "environment": "isolated Docker PostgreSQL on VPS; external model substituted in tests"
+    },
+    "typescript": "passed",
+    "next_production_build": "passed",
+    "repository_invariants": "passed",
+    "kustomize": "passed",
+    "actionlint": "passed",
+    "github_actions_remote_run": "not exercised"
+  },
+  "live_feature_checks": {
+    "checked_at": "2026-11-18T17:40:12.184766+00:00",
+    "url": "https://venture-lens.duckdns.org",
+    "private_synthetic_qa_only": true,
+    "no_paid_jobs_queued": true,
+    "main_cards_preserved": 20,
+    "real_launch_briefs": 20,
+    "evidence_task_persisted_and_exported": true,
+    "prepared_materials_do_not_admit": true,
+    "stale_task_update_rejected": true,
+    "review_cannot_start_pilot": true,
+    "pilot_lifecycle_and_metrics_persisted": true,
+    "active_pilot_blocks_reassessment": true,
+    "foreign_member_owner_viewer_denied_private_run": true,
+    "viewer_mutation_denied": true,
+    "onboarding_disable_survives_relogin": true,
+    "possible_duplicates_visible": true
+  },
+  "browser": {
+    "browser_task_saved": true,
+    "prepared_task_still_review": true,
+    "browser_pilot_started_and_completed": true,
+    "browser_metrics_persisted_in_export": true,
+    "browser_json_download_created": true,
+    "first_login_guide_auto_shown": true,
+    "guide_disable_persisted_after_reload": true,
+    "guide_manual_reopen_when_disabled": true,
+    "guide_escape_closes": true,
+    "comparison_fields_and_admission_warning_visible": true,
+    "mobile": {
+      "viewport": 390,
+      "page_without_dialog": 375,
+      "dialog_width": 370,
+      "page_with_dialog": 390,
+      "no_horizontal_page_overflow": true
+    },
+    "screenshots": [
+      ".platform/decision-guide.jpg",
+      ".platform/decision-mobile.jpg",
+      ".platform/decision-guide-mobile.jpg"
+    ],
+    "synthetic_test_calls": 0,
+    "final_screenshots": [
+      ".platform/decision-guide-final.jpg",
+      ".platform/decision-guide-mobile-final.jpg",
+      ".platform/decision-real-card.jpg"
+    ],
+    "final_mobile_guide": {
+      "viewport_width": 390,
+      "viewport_height": 844,
+      "page_width": 390,
+      "dialog_width": 355,
+      "content_scrolls_vertically": true,
+      "temporary_viewport_reset": true
+    }
+  },
+  "memory_regression": {
+    "checked_at": "2026-11-18T18:05:07.358119+00:00",
+    "scope": "bounded concurrent read/export regression, not a capacity benchmark",
+    "requests": [
+      {
+        "kind": "screen",
+        "status": 200,
+        "bytes": 463383,
+        "seconds": 8.33
+      },
+      {
+        "kind": "screen",
+        "status": 200,
+        "bytes": 485667,
+        "seconds": 9.72
+      },
+      {
+        "kind": "screen",
+        "status": 200,
+        "bytes": 463383,
+        "seconds": 11.19
+      },
+      {
+        "kind": "screen",
+        "status": 200,
+        "bytes": 485667,
+        "seconds": 11.41
+      },
+      {
+        "kind": "screen",
+        "status": 200,
+        "bytes": 463383,
+        "seconds": 9.39
+      },
+      {
+        "kind": "screen",
+        "status": 200,
+        "bytes": 485667,
+        "seconds": 9.92
+      },
+      {
+        "kind": "screen",
+        "status": 200,
+        "bytes": 1356,
+        "seconds": 3.36
+      },
+      {
+        "kind": "screen",
+        "status": 200,
+        "bytes": 1356,
+        "seconds": 2.3
+      },
+      {
+        "kind": "export",
+        "status": 200,
+        "bytes": 2555691,
+        "seconds": 10.78
+      },
+      {
+        "kind": "export",
+        "status": 429,
+        "bytes": 134,
+        "seconds": 1.88
+      }
+    ],
+    "memory_before": [
+      {
+        "pod": "api-5556ffd897-wz2t9",
+        "restarts": 0,
+        "oom_kills": 0,
+        "memory.current": 88735744,
+        "memory.peak": 149495808,
+        "memory.max": 268435456
+      }
+    ],
+    "memory_after": [
+      {
+        "pod": "api-5556ffd897-wz2t9",
+        "restarts": 0,
+        "oom_kills": 0,
+        "memory.current": 86159360,
+        "memory.peak": 149495808,
+        "memory.max": 268435456
+      }
+    ],
+    "oom_or_restart_during_check": false,
+    "compact_views_preserve_complete_exports": true,
+    "new_research_started": false
+  },
+  "current_real_data": {
+    "research": [
+      {
+        "id": "eb6e76e6e99b4298",
+        "title": "США · SaaS: отбор и проверка гипотез",
+        "status": "completed_with_gaps",
+        "cards": 10,
+        "counts": {
+          "passed": 2,
+          "rejected": 0,
+          "review": 8,
+          "error": 0,
+          "queued": 0,
+          "running": 0,
+          "waiting": 0,
+          "cancelled": 0
+        },
+        "calls": 74,
+        "tokens": 350819,
+        "scores": [
+          19.0,
+          64.0
+        ],
+        "launch_briefs": 10,
+        "briefs_with_invocations": true,
+        "reassessment_history_cards": 2,
+        "human_pilots": 0,
+        "possible_duplicate_pairs": 0
+      },
+      {
+        "id": "6ff7268691c2469a",
+        "title": "США · онлайн-модели для малого бизнеса",
+        "status": "completed_with_gaps",
+        "cards": 10,
+        "counts": {
+          "passed": 0,
+          "rejected": 0,
+          "review": 10,
+          "error": 0,
+          "queued": 0,
+          "running": 0,
+          "waiting": 0,
+          "cancelled": 0
+        },
+        "calls": 63,
+        "tokens": 276552,
+        "scores": [],
+        "launch_briefs": 10,
+        "briefs_with_invocations": true,
+        "reassessment_history_cards": 0,
+        "human_pilots": 0,
+        "possible_duplicate_pairs": 0
+      }
+    ],
+    "runs_total": 2,
+    "running_jobs": 0,
+    "qa_runs_remaining": 0
+  },
+  "specification": [
+    {
+      "id": "eb6e76e6e99b4298",
+      "status": "completed_with_gaps",
+      "cards": 10,
+      "counts": {
+        "review": 8,
+        "passed": 2
+      },
+      "calls": 74,
+      "tokens": 350819,
+      "passports": 106,
+      "complete_passports": true,
+      "verifier_contract": "3.0",
+      "consistency_checks": 10,
+      "conflict_findings": 0,
+      "prior_verification_preserved": true,
+      "scores": [
+        19.0,
+        64.0
+      ],
+      "all_invocation_hashes_valid": true,
+      "invocations": 74,
+      "agent_packet_isolation_valid": true
+    },
+    {
+      "id": "6ff7268691c2469a",
+      "status": "completed_with_gaps",
+      "cards": 10,
+      "counts": {
+        "review": 10
+      },
+      "calls": 63,
+      "tokens": 276552,
+      "passports": 113,
+      "complete_passports": true,
+      "verifier_contract": "3.0",
+      "consistency_checks": 10,
+      "conflict_findings": 0,
+      "prior_verification_preserved": true,
+      "scores": [],
+      "all_invocation_hashes_valid": true,
+      "invocations": 63,
+      "agent_packet_isolation_valid": true
+    }
+  ],
+  "context_fix": {
+    "checked_at": "2026-11-18T18:14:07.771487+00:00",
+    "cards": [
+      {
+        "model_id": "2f4c799e3b114deb",
+        "run_id": "eb6e76e6e99b4298",
+        "status_before": "review",
+        "status_after": "review",
+        "score_after": null,
+        "product": "Внедрение и настройка Salesforce CRM для малого бизнеса (консалтинг + подписка)",
+        "history_available": true
+      },
+      {
+        "model_id": "6c3f8b2561694b06",
+        "run_id": "eb6e76e6e99b4298",
+        "status_before": "review",
+        "status_after": "passed",
+        "score_after": 64.0,
+        "product": "Платформа управления проектами с ИИ-ассистентом для малого и среднего бизнеса, ориентированная на автоматизацию рутинных задач.",
+        "history_available": true
+      }
+    ],
+    "business_title_excluded": true
+  },
+  "operations": {
+    "checked_at": "2026-11-18T18:21:14.727747+00:00",
+    "owner_guide_restored_to_first_entry": true,
+    "privileges": {
+      "gateway_preferences_only": true,
+      "no_research_privilege_expansion": true
+    },
+    "server_only_backup": {
+      "backup_directory": "/opt/venture-lens/backups/20261118T182109Z",
+      "files": 2
+    }
+  },
+  "external_https": {
+    "url": "https://venture-lens.duckdns.org",
+    "checked_at": "2026-11-18T18:20:42.688379+00:00",
+    "tls_verified": true,
+    "certificate_expires": "Feb 16 09:18:14 2027 GMT",
+    "certificate_san": [
+      [
+        "DNS",
+        "venture-lens.duckdns.org"
+      ]
+    ],
+    "http_redirects_https": true,
+    "legacy_ip_redirects_to_domain_preserving_path_and_query": true,
+    "unauthenticated_api_blocked": true,
+    "owner_and_guest_login": true,
+    "viewer_read_export_only": true,
+    "owner_reaches_backend_validation": true,
+    "logout_revokes_cookie": true,
+    "runs_preserved": 2,
+    "auth_restart_exercised_in_this_check": false
+  },
+  "deployment_observed": {
+    "sync": "Synced",
+    "health": "Healthy",
+    "source_revision_before_documentation_commit": "revision-omitted",
+    "all_service_pods_ready": true,
+    "service_pod_restarts": 0,
+    "openvpn_active": false,
+    "model_connection": "supervised reverse SSH through Windows mTLS bridge"
+  },
+  "boundaries": [
+    "Duplicate hints are heuristic and require human confirmation.",
+    "LLM budget and timeline estimates are labelled assumptions; scores are not calibrated probabilities.",
+    "Concurrent read/export check is a bounded regression, not a capacity benchmark.",
+    "A second simultaneous full export per API replica receives 429 with Retry-After.",
+    "No real human pilot results were fabricated; browser pilot tests used a private synthetic fixture, subsequently removed.",
+    "One VPS is not physical high availability; new model analysis currently depends on the Windows tunnel."
+  ]
+}

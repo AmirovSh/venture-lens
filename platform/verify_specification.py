@@ -17,7 +17,7 @@ with psycopg.connect(os.environ['DATABASE_URL'].replace('postgresql+psycopg://',
    for stage,key in [('assessment','claims'),('critique','risks'),('verification','checks')]:items.extend(data.get(stage,{}).get(key,[]))
    checks+=bool(data.get('consistency',{}).get('checked'))
    findings+=len(data.get('consistency',{}).get('findings',[]))
-   history=history and bool(data.get('verification_history'))
+   history=history and bool(data.get('verification_history') or any(item.get('data',{}).get('verification') for item in data.get('analysis_history',[])))
    contracts=contracts and data.get('verification',{}).get('contract_version')=='3.0'
   invocations=c.execute('SELECT role,input,input_hash FROM invocations WHERE run_id=%s',(run_id,)).fetchall()
   hashes=all(hashlib.sha256(packet.encode()).hexdigest()==digest for role,packet,digest in invocations)
