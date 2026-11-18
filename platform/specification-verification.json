@@ -1,5 +1,5 @@
 {
-  "verified_at": "2026-11-18T12:47:56.567743+00:00",
+  "verified_at": "2026-11-18T12:50:43.165311+00:00",
   "scope": "original assignment completion; real persisted main-workspace research on VPS",
   "research": [
     {
@@ -66,7 +66,28 @@
     "actionlint": true,
     "browser_real_ui_reviewed": true,
     "real_rejected_candidates": 0,
-    "rejection_reason_and_conflict_guard_verified_by_tests": true
+    "rejection_reason_and_conflict_guard_verified_by_tests": true,
+    "public_https_after_release": {
+      "url": "https://venture-lens.duckdns.org",
+      "checked_at": "2026-11-18T12:49:29.318205+00:00",
+      "tls_verified": true,
+      "certificate_expires": "Feb 16 09:18:14 2027 GMT",
+      "certificate_san": [
+        [
+          "DNS",
+          "venture-lens.duckdns.org"
+        ]
+      ],
+      "http_redirects_https": true,
+      "legacy_ip_redirects_to_domain_preserving_path_and_query": true,
+      "unauthenticated_api_blocked": true,
+      "owner_and_guest_login": true,
+      "viewer_read_export_only": true,
+      "owner_reaches_backend_validation": true,
+      "logout_revokes_cookie": true,
+      "session_survives_auth_restart": true,
+      "runs_preserved": 2
+    }
   },
   "video": {
     "file": "venture-lens-demo.mp4",
@@ -166,7 +187,10 @@
     "history_scan_and_clean_clone_script": "scripts/prepare_submission.py",
     "github_published": false,
     "github_actions_executed_remotely": false,
-    "github_blocker": "existing CLI authorization invalid; new sign-in required"
+    "github_blocker": "existing CLI authorization invalid; new sign-in required",
+    "history_secret_scan_passed": true,
+    "bundle_verified": true,
+    "clean_clone_verified": true
   },
   "limitations": [
     "only one admitted real candidate; multi-item qualified ranking verified with fixtures",
@@ -174,5 +198,16 @@
     "AI interpretation and legal eligibility need human review",
     "sources reused for last recheck, not refreshed",
     "single VPS is not HA; scheduled off-host backup and alerts pending"
-  ]
+  ],
+  "deployment": {
+    "argocd_sync": "Synced",
+    "argocd_health": "Healthy",
+    "observed_revision": "revision-omitted",
+    "api_worker_auth_image": "venture-lens-api:spec-revision-omitted",
+    "web_image": "venture-lens-web:spec-revision-omitted",
+    "data_preserved_after_rollout": true,
+    "latest_server_only_snapshot": "/opt/venture-lens/backups/20261118T124948Z",
+    "snapshot_files": 2,
+    "snapshot_restore_tested_for_this_snapshot": false
+  }
 }
