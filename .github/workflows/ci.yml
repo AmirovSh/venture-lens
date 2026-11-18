@@ -87,7 +87,11 @@ jobs:
       - name: Diagnostics
         if: always()
         run: |
+          df -h
+          docker system df
           .tools/kubectl --kubeconfig .platform/kubeconfig --context k3d-venture-lens-lab get pods -A
+          .tools/kubectl --kubeconfig .platform/kubeconfig --context k3d-venture-lens-lab describe nodes
+          .tools/kubectl --kubeconfig .platform/kubeconfig --context k3d-venture-lens-lab -n venture-lens-lab get events --sort-by=.metadata.creationTimestamp
           test ! -f .platform/fault-report.json || cat .platform/fault-report.json
   publish:
     if: github.event_name == 'push' && github.event.repository.fork == false
