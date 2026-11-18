@@ -46,7 +46,7 @@ def invoke(run_id,role,packet,schema,instruction,model_id=None,max_tokens=12000)
                     assert_owner(session,run_id)
                     changed=session.execute(update(Run).where(Run.id==run_id,Run.calls<limits['max_llm_calls'],Run.tokens+max_tokens<=limits['max_total_tokens']).values(calls=Run.calls+1,tokens=Run.tokens+max_tokens))
                     if not changed.rowcount:raise BudgetExceeded('Достигнут лимит LLM-запросов или токенов')
-                    session.add(Invocation(id=invocation_id,run_id=run_id,model_id=model_id,role=role,model=route['model'],provider=name,prompt_version='4.0' if role in ('discovery','screening','launch_brief') else '3.0',input_hash=hashlib.sha256(content.encode()).hexdigest(),input=content,tokens=max_tokens))
+                    session.add(Invocation(id=invocation_id,run_id=run_id,model_id=model_id,role=role,model=route['model'],provider=name,prompt_version={'discovery':'4.0','screening':'4.1','critic':'4.1','launch_brief':'4.1'}.get(role,'3.0'),input_hash=hashlib.sha256(content.encode()).hexdigest(),input=content,tokens=max_tokens))
                 body=completion({'model':route['model'],'messages':[{'role':'system','content':SYSTEM+'\n'+instruction},{'role':'user','content':content}],'temperature':0,'max_tokens':max_tokens,'thinking':{'type':'disabled'},'reasoning_effort':'low' if 'deepseek' in route['model'] else 'none','chat_template_kwargs':{'enable_thinking':False},'response_format':{'type':'json_schema','json_schema':{'name':role,'strict':True,'schema':schema.model_json_schema()}}},limits['request_timeout_seconds'],route)
                 raw=body['choices'][0]['message']['content'];used=body.get('usage',{}).get('total_tokens')
                 with Session.begin() as session:

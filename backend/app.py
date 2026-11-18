@@ -262,9 +262,10 @@ def evidence_action(id:str,key:str,body:EvidenceActionInput,request:Request):
         if not task:raise HTTPException(404,'Задача не найдена или уже не относится к текущей карточке')
         saved=s.get(EvidenceAction,(id,key))
         if body.version!=(saved.version if saved else 0):raise HTTPException(409,'Задача уже изменена. Обновите карточку.')
+        previous={'status':saved.status,'owner':saved.owner,'note':saved.note,'source_urls':read(saved.source_urls),'version':saved.version} if saved else None
         if not saved:saved=EvidenceAction(model_id=id,task_key=key,version=0);s.add(saved)
         saved.status=body.status;saved.owner=body.owner;saved.note=body.note;saved.source_urls=dump(body.source_urls);saved.updated=time.time();saved.version+=1
-        s.add(Event(run_id=run.id,model_id=id,stage='evidence_task',message='Обновлена задача: '+task['title'],payload=dump({'key':key,'status':body.status,'version':saved.version})))
+        s.add(Event(run_id=run.id,model_id=id,stage='evidence_task',message='Обновлена задача: '+task['title'],payload=dump({'key':key,'title':task['title'],'previous':previous,'result':body.model_dump(exclude={'version'}),'version':saved.version})))
         return {'status':'saved','version':saved.version,'notice':'Материалы сохранены. Автоматический допуск не изменён.'}
 
 

@@ -8,6 +8,7 @@ from .llm import invoke, Cancelled
 from .execution import assert_owner,current,draining,DependencyUnavailable
 from .passports import normalize_data, provenance_for
 from .consistency import reconcile
+from .decision_support import business_conditions
 
 TERMINAL={'passed','rejected','review','error'}
 
@@ -154,7 +155,7 @@ def process_model(model_id):
     guard(run_id)
     if 'assessment' not in data:
         emit(run_id,'screening','Проверяем обязательные условия и готовим сопоставимые оценки',model_id)
-        result=invoke(run_id,'screening',{'candidate':candidate,'conditions':{k:v for k,v in config.items() if k!='discovery_sources'},'criteria':pol['criteria'],'weights':pol['weights'],'sources':context_sources(data['sources'])},Assessment,
+        result=invoke(run_id,'screening',{'candidate':candidate,'conditions':business_conditions(config),'criteria':pol['criteria'],'weights':pol['weights'],'sources':context_sources(data['sources'])},Assessment,
             'Оцени возможность НАШЕГО запуска теста и первой оплаты за 90 дней в указанной юрисдикции и команде. '
             'gates: ровно все criteria с их id. dimensions: ровно все weights с их id. Шкала 0..5; null если нет оснований. '
             '5 = доступен дешёвый быстрый самостоятельный запуск и покупка; 0 = практически невозможно за 90 дней. '
@@ -186,7 +187,7 @@ def process_model(model_id):
     guard(run_id)
     if 'critique' not in data:
         emit(run_id,'critique','Независимый критик ищет причины срыва запуска',model_id)
-        data['critique']=invoke(run_id,'critic',{'candidate':candidate,'conditions':{k:v for k,v in config.items() if k!='discovery_sources'},'sources':context_sources(data['sources'])},Critique,
+        data['critique']=invoke(run_id,'critic',{'candidate':candidate,'conditions':business_conditions(config),'sources':context_sources(data['sources'])},Critique,
             'Найди 1–3 САМЫЕ СИЛЬНЫЕ причины, почему за 90 дней не получим первую оплату. Ты не видишь оценки других агентов. '
             'Отделяй проверяемое фактическое утверждение factual=true от прогноза/суждения factual=false. '
             'Не выдумывай факты и источники. Для каждого риска укажи метод, уверенность, source_id и дословную quote либо null, source_date либо null. '

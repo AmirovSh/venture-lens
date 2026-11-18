@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy import select
 from backend import db
 from backend.app import app
-from backend.decision_support import model_support,research_summary,main_risk,hypothesis_name
+from backend.decision_support import model_support,research_summary,main_risk,hypothesis_name,business_conditions
 from backend.schemas import PilotInput,LaunchEstimate
 from backend.settings import policy
 from test_pipeline import store,seed,assessment
@@ -34,6 +34,11 @@ def test_low_score_is_not_promoted_to_launch_recommendation(store):
         assert run['summary']['candidates_to_clarify']==['model']
         assert model['support']['brief']['budget_usd'] is None
         assert model['support']['budget_cap_usd']==10000
+
+
+def test_research_display_title_cannot_change_business_context():
+    config={'title':'VPS OpenVPN technical smoke test','region':'US','budget':10000,'team':'Founders','focus':'CRM subscription','discovery_sources':[{'text':'catalog'}]}
+    assert business_conditions(config)=={'region':'US','budget':10000,'team':'Founders','focus':'CRM subscription'}
 
 
 def test_recommendation_requires_both_gates_and_snapshot_thresholds(store):

@@ -11,6 +11,11 @@ CRITERION_ACTIONS={
 }
 
 
+def business_conditions(settings):
+    # The research title is a UI label, never a product requirement.
+    return {key:settings[key] for key in ('region','budget','team','focus') if key in settings}
+
+
 def tasks_for(data,policy):
     titles={item['id']:item['title'] for item in policy.get('criteria',[])}
     tasks=[]
@@ -50,6 +55,8 @@ def model_support(model,data,conditions,policy,actions=None,pilot=None):
             'budget_usd':None,'first_payment_days':None,'assumptions':assessment.get('unknowns',[]),'origin':'existing_card'}
     else:brief={**brief,'origin':'model_estimate'}
     tasks=tasks_for(data,policy)
+    current_keys={task['key'] for task in tasks}
+    archived_tasks=[{'key':key,**value} for key,value in (actions or {}).items() if key not in current_keys]
     for task in tasks:
         saved=(actions or {}).get(task['key'])
         task.update(saved or {'status':'open','owner':'','note':'','source_urls':[],'version':0,'updated':None})
@@ -65,7 +72,7 @@ def model_support(model,data,conditions,policy,actions=None,pilot=None):
     contributions=[{'id':item['id'],'title':policy.get('weights',{}).get(item['id'],{}).get('title',item['id']),
         'score':item['score'],'points':None if item['score'] is None else round(item['score']*20*policy.get('weights',{}).get(item['id'],{}).get('weight',0),2),'reason':item['reason']}
         for item in assessment.get('dimensions',[])]
-    return {'brief':brief,'brief_provenance':data.get('launch_brief_provenance'),'tasks':tasks,'open_tasks':sum(task['status']=='open' for task in tasks),
+    return {'brief':brief,'brief_provenance':data.get('launch_brief_provenance'),'tasks':tasks,'archived_tasks':archived_tasks,'open_tasks':sum(task['status']=='open' for task in tasks),
         'verdict':verdict,'verdict_label':label,'admitted':admitted,'attractive':attractive,'main_risk':main_risk(data),
         'contributions':contributions,'budget_cap_usd':conditions.get('budget'),'pilot':pilot,
         'revenue_model':assessment.get('revenue'),'analogue':assessment.get('analogue'),'thresholds':{'score':threshold,'coverage':min_coverage}}
