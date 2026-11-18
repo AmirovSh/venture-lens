@@ -14,7 +14,7 @@ export default function SourceLibrary({sources,models,title}:{sources:Source[];m
  const associations=useMemo(()=>{
   const result=new Map<string,Set<string>>();
   for(const model of models){
-   const used=[model.data.discovery_source,...(model.data.sources||[]),...(model.data.verification_sources||[])];
+   const used=[model.data.discovery_source,{id:model.data.candidate?.discovery_source_id},...(model.data.sources||[]),...(model.data.verification_sources||[])];
    for(const source of used){
     if(!source?.id)continue;
     if(!result.has(source.id))result.set(source.id,new Set());
