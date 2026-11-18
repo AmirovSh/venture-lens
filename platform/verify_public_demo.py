@@ -4,6 +4,7 @@ import http.client
 import http.cookies
 import json
 import ssl
+import secrets
 from datetime import datetime, timezone
 from urllib.parse import urlencode, urlsplit
 import socks
@@ -14,6 +15,7 @@ from public_settings import public_origin
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--restart-auth', action='store_true', help='Also verify session survival across an auth deployment restart')
+    parser.add_argument('--registration', action='store_true', help='Create two isolated QA accounts; does not start paid research')
     args = parser.parse_args()
     access = json.loads((ROOT / '.platform/public-demo-credentials.json').read_text())
     ssh = json.loads((ROOT / '.platform/server.json').read_text())
@@ -99,6 +101,46 @@ def main():
              'unauthenticated_api_blocked': True, 'owner_and_guest_login': True, 'viewer_read_export_only': True,
              'owner_reaches_backend_validation': True, 'logout_revokes_cookie': True,
              'session_survives_auth_restart': args.restart_auth, 'runs_preserved': len(runs)}
+    if args.registration:
+        assert request('/auth/register')[0] == 200
+        registered = []
+        for suffix in ['a', 'b']:
+            account = {'username': 'qa_' + secrets.token_hex(6) + suffix, 'name': 'Проверка регистрации', 'password': secrets.token_urlsafe(24)}
+            body = urlencode(account | {'password_confirm': account['password']}).encode()
+            status, headers, _ = request('/auth/register', 'POST', body)
+            assert status == 303, 'Registration failed: HTTP ' + str(status)
+            cookie = http.cookies.SimpleCookie(); cookie.load(headers['Set-Cookie'])
+            token = cookie['__Host-venturelens_session'].value
+            identity = json.loads(request('/auth/session', token=token)[2])
+            assert identity['role'] == 'member' and identity['workspace'] != 'main'
+            assert identity['limits'] == {'active': 1, 'daily': 3}
+            assert json.loads(request('/api/runs', token=token)[2]) == []
+            limits = json.loads(request('/api/account', token=token)[2])['limits']
+            assert limits['remaining'] == 3 and limits['running'] == 0
+            for path in ['', '/export', '/events', '/audit']:
+                assert request('/api/runs/' + runs[0]['id'] + path, token=token)[0] == 404
+            for path in ['/cancel', '/retry']:
+                assert request('/api/runs/' + runs[0]['id'] + path, 'POST', {}, token)[0] == 404
+            assert request('/api/runs', 'POST', {'count': 1}, token)[0] == 422
+            assert request('/auth/logout', 'POST', b'', token)[0] == 303
+            assert request('/auth/session', token=token)[0] == 401
+            registered.append(account | {'workspace': identity['workspace']})
+        assert registered[0]['workspace'] != registered[1]['workspace']
+        saved_path = ROOT / '.platform/registration-check-accounts.json'
+        saved_path.write_text(json.dumps({'url': access['url'], 'accounts': registered}, ensure_ascii=False, indent=2) + '\n')
+        from configure_public_demo import private_permissions
+        private_permissions(saved_path)
+        first = registered[0]
+        status, headers, _ = request('/auth/login', 'POST', urlencode({'username': first['username'], 'password': first['password']}).encode())
+        assert status == 303
+        cookie = http.cookies.SimpleCookie(); cookie.load(headers['Set-Cookie'])
+        token = cookie['__Host-venturelens_session'].value
+        assert json.loads(request('/auth/session', token=token)[2])['workspace'] == first['workspace']
+        assert request('/auth/logout', 'POST', b'', token)[0] == 303
+        proof['registration'] = {'created_accounts': 2, 'automatic_login': True, 'isolated_workspaces': True,
+                                 'demo_run_reads_and_writes_denied': True, 'account_limits_visible': True,
+                                 'registered_account_relogin': True, 'logout_revokes_session': True,
+                                 'no_paid_research_started': True}
     (ROOT / '.platform/public-external-report.json').write_text(json.dumps(proof, indent=2) + '\n')
     print(json.dumps(proof, indent=2))
 

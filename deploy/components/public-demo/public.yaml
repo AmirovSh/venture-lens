@@ -34,7 +34,8 @@ spec:
         env:
         - name: PUBLIC_ORIGIN
           valueFrom: {configMapKeyRef: {name: venture-lens-public-settings, key: PUBLIC_ORIGIN}}
-        - {name: REGISTRATION_ENABLED, value: 'true'}
+        - name: REGISTRATION_ENABLED
+          valueFrom: {configMapKeyRef: {name: venture-lens-public-settings, key: REGISTRATION_ENABLED}}
         - name: AUTH_CONTEXT_SECRET
           valueFrom: {secretKeyRef: {name: venture-lens-demo-access, key: AUTH_CONTEXT_SECRET}}
         - {name: PYTHONDONTWRITEBYTECODE, value: '1'}
