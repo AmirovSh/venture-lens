@@ -94,19 +94,24 @@
       "tls_verified": true,
       "roles": [
         "owner",
-        "viewer"
+        "viewer",
+        "member"
       ],
       "session_store": "PostgreSQL",
       "auth_replicas": 2,
       "report": "platform/public-verification.json",
-      "legacy_ip_redirects_to_domain": true
+      "legacy_ip_redirects_to_domain": true,
+      "registration_enabled": true,
+      "personal_workspace_isolation": true,
+      "registration_report": "platform/public-verification.json",
+      "registration_checked_at": "2026-11-18T10:40:59.429760+00:00"
     }
   },
   "limitations": [
     "single physical host; database and S3 not HA",
     "all real research candidates require evidence review; no qualified ranking",
     "GitHub Actions/GHCR prepared but not executed remotely",
-    "scheduled off-host backups, alerts, OIDC/user isolation and load tests pending",
+    "scheduled off-host backups, alerts, password recovery/OIDC and load tests pending",
     "full worker fault suite verified previously on isolated local cluster; real VPS worker scaling 1 -> 2 -> 1 observed with autonomous research"
   ]
 }

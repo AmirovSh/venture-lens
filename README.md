@@ -39,7 +39,7 @@ npm.cmd run build
 .\start.ps1
 ```
 
-Для независимого от Docker запуска задайте `DATABASE_URL=sqlite:///./data/venture-lens.db`. SQLite подходит для одного локального сервиса; PostgreSQL рекомендуется для нескольких исполнителей. Первоначальная SQLite-БД этого проекта сохранена как диагностическая копия. Скрипт `scripts/migrate_local.py` переносит её только в пустую PostgreSQL-БД, не удаляя оригинал.
+Для независимого от Docker запуска задайте `DATABASE_URL=sqlite:///./data/venture-lens.db`. Перед запуском существующей БД выполните `.venv\Scripts\python.exe -m backend.migrate`. SQLite подходит для одного локального сервиса; PostgreSQL рекомендуется для нескольких исполнителей. Первоначальная SQLite-БД этого проекта сохранена как диагностическая копия. Скрипт `scripts/migrate_local.py` переносит её только в пустую PostgreSQL-БД, не удаляя оригинал.
 
 ## Как пользоваться
 

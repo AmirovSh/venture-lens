@@ -1,9 +1,9 @@
 {
-  "verified_at": "2026-11-18T10:20:02.664571+00:00",
-  "scope": "public authenticated single-VPS demo, shared workspace",
+  "verified_at": "2026-11-18T10:47:30.191836+00:00",
+  "scope": "public registration, isolated personal workspaces and shared owner/viewer demonstration on one VPS",
   "external": {
     "url": "https://venture-lens.duckdns.org",
-    "checked_at": "2026-11-18T10:17:40.701449+00:00",
+    "checked_at": "2026-11-18T10:40:59.429760+00:00",
     "tls_verified": true,
     "certificate_expires": "Feb 16 09:18:14 2027 GMT",
     "certificate_san": [
@@ -20,7 +20,18 @@
     "owner_reaches_backend_validation": true,
     "logout_revokes_cookie": true,
     "session_survives_auth_restart": true,
-    "runs_preserved": 2
+    "runs_preserved": 2,
+    "registration": {
+      "created_accounts": 2,
+      "automatic_login": true,
+      "isolated_workspaces": true,
+      "demo_run_reads_and_writes_denied": true,
+      "foreign_model_and_source_denied": true,
+      "account_limits_visible": true,
+      "registered_account_relogin": true,
+      "logout_revokes_session": true,
+      "no_paid_research_started": true
+    }
   },
   "internal": {
     "unauthenticated_api_blocked": true,
@@ -34,9 +45,17 @@
     "persisted_runs": 2
   },
   "tests": {
-    "passed": 46,
-    "skipped": 1,
-    "skip_reason": "PostgreSQL-only concurrency unit test; live PostgreSQL access/session checks passed separately"
+    "postgresql": {
+      "passed": 59,
+      "skipped": 0,
+      "isolated_database": true,
+      "concurrent_member_admission_verified": true
+    },
+    "sqlite": {
+      "passed": 57,
+      "skipped": 2,
+      "skip_reason": "PostgreSQL-only concurrency checks"
+    }
   },
   "browser": {
     "desktop_login_guest_and_owner": true,
@@ -48,7 +67,16 @@
     "named_domain_guest_login": true,
     "named_domain_guest_controls_disabled": true,
     "named_domain_url": "https://venture-lens.duckdns.org/",
-    "named_domain_screenshot": ".platform/public-demo-domain.jpg"
+    "named_domain_screenshot": ".platform/public-demo-domain.jpg",
+    "registration_form_desktop": true,
+    "registration_form_mobile_width": 390,
+    "registration_mobile_no_horizontal_overflow": true,
+    "member_login_and_empty_workspace": true,
+    "member_create_research_form": true,
+    "member_remaining_quota_visible": true,
+    "registration_screenshot": ".platform/registration-form.jpg",
+    "member_workspace_screenshot": ".platform/registration-workspace.jpg",
+    "registration_mobile_screenshot": ".platform/registration-mobile.jpg"
   },
   "backup": {
     "backup_directory": ".platform/server-backups/20261118T095428Z",
@@ -72,9 +100,11 @@
   },
   "constraints": [
     "one physical VPS, single TLS edge",
-    "one shared demonstration workspace; no per-user research isolation",
     "GitHub Actions prepared but not run remotely",
-    "scheduled external backups, monitoring and load tests pending"
+    "scheduled external backups, monitoring and load tests pending",
+    "password recovery, account deletion and account administration UI pending",
+    "registered_users limited to 200; registration 5 attempts per IP per hour; member 1 active and 3 new runs per rolling 24 hours",
+    "workspace checks implemented in API; no PostgreSQL RLS; database administrators retain access"
   ],
   "previous_ip_verification": {
     "url": "https://91.108.213.165",
@@ -101,5 +131,43 @@
     "system_and_google_resolver_verified": true,
     "account": "user-owned DuckDNS",
     "api_token_copied_to_vps": false
+  },
+  "previous_domain_verification": {
+    "url": "https://venture-lens.duckdns.org",
+    "checked_at": "2026-11-18T10:17:40.701449+00:00",
+    "tls_verified": true,
+    "certificate_expires": "Feb 16 09:18:14 2027 GMT",
+    "certificate_san": [
+      [
+        "DNS",
+        "venture-lens.duckdns.org"
+      ]
+    ],
+    "http_redirects_https": true,
+    "legacy_ip_redirects_to_domain_preserving_path_and_query": true,
+    "unauthenticated_api_blocked": true,
+    "owner_and_guest_login": true,
+    "viewer_read_export_only": true,
+    "owner_reaches_backend_validation": true,
+    "logout_revokes_cookie": true,
+    "session_survives_auth_restart": true,
+    "runs_preserved": 2
+  },
+  "registration_database": {
+    "registered_accounts": 2,
+    "distinct_personal_workspaces": 2,
+    "password_hashes_only": true,
+    "main_runs_preserved": 2,
+    "models_preserved": 20,
+    "llm_invocations_preserved": 82,
+    "auth_role_select_insert_only": true,
+    "api_rejects_missing_identity": true
+  },
+  "registration_upgrade_backups": {
+    "before_migration": "/opt/venture-lens/backups/20261118T103031Z",
+    "after_migration": "/opt/venture-lens/backups/20261118T104637Z",
+    "location": "VPS only",
+    "off_host_download": "not performed; automatic approval review rejected full database/source transfer",
+    "existing_off_host_backup": "20261118T095428Z; predates registration migration"
   }
 }
