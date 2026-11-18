@@ -1,0 +1,99 @@
+{
+  "source_revision": "revision-omitted",
+  "images": {
+    "api": "venture-lens-api:fix-revision-omitted",
+    "web": "venture-lens-web:fix-revision-omitted"
+  },
+  "before": {
+    "before": {
+      "schema": "0006_product_controls",
+      "active_runs": 0,
+      "runs": 4,
+      "models": 34,
+      "invocations": 193,
+      "jobs": {
+        "completed": 38
+      }
+    },
+    "backup": {
+      "directory": "/opt/venture-lens/backups/20261118T221527Z",
+      "completed": true,
+      "files": 2
+    }
+  },
+  "after": {
+    "state": {
+      "schema": "0007_connection_rotation",
+      "active_runs": 0,
+      "runs": 4,
+      "models": 34,
+      "invocations": 193,
+      "jobs": {
+        "completed": 38
+      }
+    },
+    "existing_records_preserved": true,
+    "gitops": {
+      "revision": "revision-omitted",
+      "sync": "Synced",
+      "health": "Healthy"
+    },
+    "ready_pods": 10,
+    "model_probes": {
+      "discovery": {
+        "status": "ok",
+        "model": "qwen3.8-27b",
+        "configuration_version": 1,
+        "latency_ms": 935,
+        "notice": "Тест использовал один запрос сервера моделей."
+      },
+      "critic": {
+        "status": "ok",
+        "model": "deepseek-v4-flash",
+        "configuration_version": 1,
+        "latency_ms": 698,
+        "notice": "Тест использовал один запрос сервера моделей."
+      }
+    }
+  },
+  "live_contracts": {
+    "checked_at": "2026-11-18T22:17:59.788718+00:00",
+    "fixture": "fixqa6d62c139134",
+    "paid_model_requests": 0,
+    "history_events": 650,
+    "new_events": 510,
+    "cursors_unique_and_complete": true,
+    "rotation": "same-server default binding 0 to current version; no credentials changed",
+    "analysis_preserved": true,
+    "no_jobs_started": true,
+    "audit_event": true,
+    "viewer_forbidden": true,
+    "stale_version_conflict": true,
+    "fixture_removed": true
+  },
+  "automated": {
+    "postgresql": {
+      "passed": 121,
+      "skipped": 0,
+      "seconds": 30.83,
+      "log": "/opt/venture-lens/reliability-fix-build.log"
+    },
+    "typescript": "passed",
+    "next_production_build": "passed on VPS",
+    "repository_invariants": "passed",
+    "actionlint": "passed",
+    "custom_key_rotation": "controlled provider payload used replacement key and pinned prior model/prompt; tested in isolated PostgreSQL",
+    "configuration_recovery": "unreadable encrypted key returns 409 before provider call; replacement restores probe",
+    "concurrent_rotation": "one 200, one 409, one audit event in PostgreSQL"
+  },
+  "browser": {
+    "status": "blocked",
+    "reason": "Windows desktop access denied; no visual pass claimed",
+    "remaining_previous_checks": [
+      "Escape",
+      "reopening market form guidance",
+      "comparison guidance"
+    ]
+  },
+  "main_and_private_research": "existing 4 studies, 34 cards, 193 invocations and 38 completed jobs retained; live QA fixture removed"
+}
