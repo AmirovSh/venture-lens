@@ -28,10 +28,10 @@ export default function Page(){
  const[runs,setRuns]=useState<Run[]>([]),[run,setRun]=useState<Run|null>(null),[runId,setRunId]=useState(''),[health,setHealth]=useState<Json|null>(null),[events,setEvents]=useState<Event[]>([]),[view,setView]=useState('overview'),[filter,setFilter]=useState('all'),[query,setQuery]=useState(''),[descending,setDescending]=useState(false),[selected,setSelected]=useState<string[]>([]),[card,setCard]=useState<string|null>(null),[newModal,setNewModal]=useState(false),[compare,setCompare]=useState(false),[error,setError]=useState(''),[toast,setToast]=useState(''),[loading,setLoading]=useState(true),[audit,setAudit]=useState<Json[]|null>(null),[busy,setBusy]=useState(false),[sidebar,setSidebar]=useState(false);
  const[identity,setIdentity]=useState<{name:string;role:string}|null>(null);
  const[account,setAccount]=useState<Json|null>(null);
+ const readOnly=identity?.role==='viewer';
  const member=identity?.role==='member';
  const cannotCreate=readOnly||!!(member&&account?.limits&&(account.limits.running>0||account.limits.remaining===0));
  const createHint=readOnly?'Гостевой доступ: только просмотр':member&&account?.limits?.running>0?'Дождитесь завершения текущего исследования':member&&account?.limits?.remaining===0?'Доступно до трёх новых исследований за 24 часа':undefined;
- const readOnly=identity?.role==='viewer';
  useEffect(()=>{fetch('/auth/session').then(async response=>{if(response.ok)setIdentity(await response.json());}).catch(()=>{});},[]);
  const refresh=useCallback(async(id?:string)=>{try{const [list,accountInfo]=await Promise.all([api('/runs'),api('/account')]);setAccount(accountInfo);setRuns(list);const target=id||runId||list[0]?.id;if(target){const [detail,log]=await Promise.all([api('/runs/'+target),api('/runs/'+target+'/events')]);setRun(detail);setEvents(log);if(!runId)setRunId(target);}setError('');}catch(e){setError((e as Error).message);}finally{setLoading(false);}},[runId]);
  useEffect(()=>{api('/health').then(setHealth).catch(()=>setError('Сервис пока недоступен. Проверьте запуск API.'));},[]);
