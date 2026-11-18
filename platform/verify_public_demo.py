@@ -77,6 +77,7 @@ def main():
     assert json.loads(request('/auth/session', token=owner)[2])['role'] == 'owner'
     runs = json.loads(request('/api/runs', token=guest)[2])
     assert len(runs) >= 2
+    sample = json.loads(request('/api/runs/' + runs[0]['id'], token=guest)[2])
     assert request('/api/runs/' + runs[0]['id'] + '/export', token=guest)[0] == 200
     # An invalid research body must reach validation for the owner, but never for the guest.
     assert request('/api/runs', 'POST', {'count': 1}, owner)[0] == 422
@@ -121,6 +122,12 @@ def main():
                 assert request('/api/runs/' + runs[0]['id'] + path, token=token)[0] == 404
             for path in ['/cancel', '/retry']:
                 assert request('/api/runs/' + runs[0]['id'] + path, 'POST', {}, token)[0] == 404
+            if sample['models']:
+                model = sample['models'][0]
+                assert request('/api/models/' + model['id'] + '/decision', 'PATCH', {'decision': 'shortlist', 'note': ''}, token)[0] == 404
+                sources = model['data'].get('sources', [])
+                if sources:
+                    assert request('/api/sources/' + sources[0]['sha256'], token=token)[0] == 404
             assert request('/api/runs', 'POST', {'count': 1}, token)[0] == 422
             assert request('/auth/logout', 'POST', b'', token)[0] == 303
             assert request('/auth/session', token=token)[0] == 401
@@ -138,7 +145,7 @@ def main():
         assert json.loads(request('/auth/session', token=token)[2])['workspace'] == first['workspace']
         assert request('/auth/logout', 'POST', b'', token)[0] == 303
         proof['registration'] = {'created_accounts': 2, 'automatic_login': True, 'isolated_workspaces': True,
-                                 'demo_run_reads_and_writes_denied': True, 'account_limits_visible': True,
+                                 'demo_run_reads_and_writes_denied': True, 'foreign_model_and_source_denied': bool(sample['models']), 'account_limits_visible': True,
                                  'registered_account_relogin': True, 'logout_revokes_session': True,
                                  'no_paid_research_started': True}
     (ROOT / '.platform/public-external-report.json').write_text(json.dumps(proof, indent=2) + '\n')
