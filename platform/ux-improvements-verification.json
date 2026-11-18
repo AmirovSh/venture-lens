@@ -1,0 +1,75 @@
+{
+  "verified_at": "2026-11-18T20:07:38.000798+00:00",
+  "url": "https://venture-lens.duckdns.org",
+  "web_image": "venture-lens-web:ux-revision-omitted",
+  "api_worker_image_unchanged": "venture-lens-api:decision-revision-omitted",
+  "code_commit": "revision-omitted",
+  "checks": {
+    "typescript": "passed",
+    "next_production_build": "passed",
+    "repository_invariants": "passed",
+    "git_diff_check": "passed",
+    "browser": {
+      "desktopPilot": {
+        "firstScreenActionBottom": 837,
+        "scrollAreaBottom": 837,
+        "midFormScrollTop": 353,
+        "midFormActionBottom": 837,
+        "actionVisible": true
+      },
+      "mobilePilot": {
+        "viewportWidth": 390,
+        "viewportHeight": 844,
+        "pageWidth": 390,
+        "dialogBottom": 828,
+        "actionBottom": 827,
+        "buttonBottom": 815,
+        "savedFromPinnedButton": true
+      },
+      "sourceFilters": {
+        "total": 109,
+        "advisor360ExactSources": 7,
+        "restaurant365ExactSources": 12,
+        "restaurant365Pages": 9,
+        "restaurant365Snippets": 3,
+        "sharedDiscoverySourcesIncluded": true,
+        "emptyCombinationExplained": true,
+        "emptyStateResetWorks": true,
+        "mobileResetWorks": true,
+        "resetRestoresAll109": true,
+        "mobilePageWidth": 375,
+        "mobileViewportWidth": 390,
+        "temporaryViewportReset": true
+      },
+      "javascriptErrors": 0,
+      "screenshots": [
+        ".platform/ux-pilot-desktop.jpg",
+        ".platform/ux-pilot-mobile.jpg",
+        ".platform/ux-source-filters-desktop.jpg",
+        ".platform/ux-source-filters-mobile.jpg"
+      ]
+    },
+    "persistence": {
+      "pinned_button_saved_pilot_version": 4,
+      "pilot_values_preserved": true,
+      "completed_state_preserved": true,
+      "export_contains_saved_pilot": true,
+      "audit_event_version_4": true,
+      "no_new_llm_calls": true,
+      "no_research_reassessment": true
+    }
+  },
+  "deployment_observed": {
+    "argocd": "Synced / Healthy",
+    "revision_before_documentation": "revision-omitted",
+    "service_pods_ready": 9,
+    "restarts": 0
+  },
+  "scope": [
+    "Company and source-type filters combine with AND; source IDs are unique and shared discovery links use candidate.discovery_source_id.",
+    "Filters operate on the current research and reset when switching research.",
+    "Pilot action stays visible while scrolling form fields; after the form ends it scrolls with the following analysis.",
+    "Browser save was performed only on the existing explicitly labelled private test pilot; business metrics and main demo data were not edited.",
+    "Backend/API schema and database migrations were not changed."
+  ]
+}
