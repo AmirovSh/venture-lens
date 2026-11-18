@@ -32,7 +32,7 @@ images:
   newTag: decision-revision-omitted
 - name: venture-lens-web
   newName: venture-lens-web
-  newTag: decision-revision-omitted
+  newTag: journey-revision-omitted
 - name: venture-lens-vpn-gateway
   newName: venture-lens-vpn-gateway
   newTag: vpn-51526eaa9d61e86e
