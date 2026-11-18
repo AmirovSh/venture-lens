@@ -5,13 +5,15 @@ VERSION = '3.0'
 def reconcile(data, policy):
     allowed = {criterion['id'] for criterion in policy['criteria']}
     risks = {risk['id']: risk for risk in data.get('critique', {}).get('risks', [])}
+    original = data.get('screening_snapshot', data['assessment'])
+    admitted = {gate['id'] for gate in original['gates'] if gate['status'] == 'pass'}
     findings = []
     for check in data.get('verification', {}).get('checks', []):
         risk = risks.get(check['claim_id'], {})
         if not risk.get('factual') or check.get('status') not in ('supported', 'partial') or not check.get('grounded'):
             continue
         for impact in check.get('criterion_impacts', []):
-            if impact.get('criterion_id') not in allowed or impact.get('effect') not in ('contradicts', 'uncertain'):
+            if impact.get('criterion_id') not in allowed & admitted or impact.get('effect') not in ('contradicts', 'uncertain'):
                 continue
             findings.append({'criterion_id': impact['criterion_id'], 'risk_id': check['claim_id'],
                              'check_status': check['status'], 'effect': impact['effect'],

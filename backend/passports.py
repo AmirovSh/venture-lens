@@ -59,6 +59,9 @@ def materialize(workspace='main'):
                 raise RuntimeError('Passport migration requires inactive research')
             for model in session.scalars(select(Model).where(Model.run_id == run.id)):
                 data=normalize_data(read(model.data),provenance_for(session,model.id),run.created)
+                if data.get('verification',{}).get('contract_version')==VERSION and data.get('assessment'):
+                    from .consistency import reconcile
+                    reconcile(data,read(run.policy))
                 model.data=dump(data);count+=1
     return count
 

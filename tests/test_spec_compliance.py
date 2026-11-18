@@ -64,6 +64,16 @@ def test_judgment_passport_has_real_invocation_time_and_explicit_source_applicab
     assert check['method']=='model_judgment' and check['generated_at']==created+10
 
 
+def test_consistency_does_not_claim_a_new_conflict_for_an_unadmitted_gate():
+    screening=assessment();screening['gates'][-1]['status']='review'
+    data={'assessment':screening,'screening_snapshot':copy.deepcopy(screening),
+          'critique':{'risks':[{'id':'r','factual':True}]},
+          'verification':{'contract_version':'3.0','checks':[{'claim_id':'r','status':'partial','grounded':True,
+             'criterion_impacts':[{'criterion_id':'large_analogue','effect':'contradicts','reason':'Market capitalization is above the threshold'}]}]}}
+    assert reconcile(data,policy())==[]
+    assert data['assessment']['gates'][-1]['status']=='review'
+
+
 def test_recheck_keeps_history_sources_and_resets_fencing_for_completed_with_gaps(store,monkeypatch):
     from scripts import recheck
     monkeypatch.setattr(recheck,'Session',store)
