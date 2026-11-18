@@ -28,6 +28,9 @@ with psycopg.connect(os.environ['DATABASE_URL'].replace('postgresql+psycopg://',
         cursor.execute(sql.SQL('GRANT USAGE ON SCHEMA public TO {}').format(sql.Identifier(name)))
         cursor.execute(sql.SQL('GRANT SELECT,INSERT,UPDATE,DELETE ON demo_sessions,demo_login_limits TO {}').format(sql.Identifier(name)))
         cursor.execute(sql.SQL('GRANT SELECT,INSERT ON registered_users TO {}').format(sql.Identifier(name)))
+        cursor.execute(sql.SQL('GRANT UPDATE (password_hash,role) ON registered_users TO {}').format(sql.Identifier(name)))
+        cursor.execute(sql.SQL('GRANT SELECT,INSERT,UPDATE ON account_security,password_recovery_requests TO {}').format(sql.Identifier(name)))
+        cursor.execute(sql.SQL('GRANT INSERT ON account_security_events TO {}').format(sql.Identifier(name)))
 '''
 
 

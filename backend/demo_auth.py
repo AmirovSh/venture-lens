@@ -20,6 +20,8 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, Resp
 from sqlalchemy import MetaData, Table, Column, String, Float, Integer, create_engine, select, delete, case, func, text
 from sqlalchemy.exc import SQLAlchemyError, IntegrityError
 from .auth_context import sign_identity
+from .passwords import password_hash, password_matches
+from .account_security import metadata, SecurityStoreMixin, install_security_routes, security
 from starlette.background import BackgroundTask
 from starlette.concurrency import run_in_threadpool
 
@@ -28,7 +30,6 @@ TTL = 8 * 60 * 60
 WINDOW = 300
 MAX_ATTEMPTS = 10
 MAX_BODY = 1_000_000
-metadata = MetaData()
 sessions = Table('demo_sessions', metadata, Column('token_hash', String(64), primary_key=True),
                  Column('username', String(64), nullable=False), Column('credential_version', String(64), nullable=False),
                  Column('expires', Float, nullable=False, index=True))
@@ -36,24 +37,8 @@ limits = Table('demo_login_limits', metadata, Column('key_hash', String(64), pri
                Column('window_start', Float, nullable=False, index=True), Column('attempts', Integer, nullable=False))
 accounts = Table('registered_users', metadata, Column('username', String(64), primary_key=True),
                  Column('name', String(60), nullable=False), Column('password_hash', String(256), nullable=False),
-                 Column('workspace', String(64), nullable=False, unique=True), Column('created', Float, nullable=False))
-
-
-def password_hash(password, salt=None):
-    salt = salt or secrets.token_hex(16)
-    digest = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), 600_000).hex()
-    return 'pbkdf2_sha256$600000$' + salt + '$' + digest
-
-
-def password_matches(password, encoded):
-    try:
-        algorithm, iterations, salt, expected = encoded.split('$')
-        if algorithm != 'pbkdf2_sha256' or int(iterations) != 600_000:
-            return False
-        actual = hashlib.pbkdf2_hmac('sha256', password.encode(), bytes.fromhex(salt), int(iterations)).hex()
-        return hmac.compare_digest(actual, expected)
-    except (ValueError, TypeError):
-        return False
+                 Column('workspace', String(64), nullable=False, unique=True), Column('created', Float, nullable=False),
+                 Column('role', String(16), nullable=False, server_default='member', default='member'))
 
 
 def safe_next(value):
@@ -71,12 +56,14 @@ class Config:
     upstream: str = 'http://web:3100'
     context_secret: str = ''
     registration_enabled: bool = False
+    security_enabled: bool = True
 
     @classmethod
     def environment(cls):
         return cls(os.environ['PUBLIC_ORIGIN'].rstrip('/'), json.loads(os.environ['DEMO_AUTH_USERS']), os.environ['DATABASE_URL'],
                    context_secret=os.environ.get('AUTH_CONTEXT_SECRET', ''),
-                   registration_enabled=os.environ.get('REGISTRATION_ENABLED') == 'true')
+                   registration_enabled=os.environ.get('REGISTRATION_ENABLED') == 'true',
+                   security_enabled=os.environ.get('ACCOUNT_SECURITY_ENABLED') == 'true')
 
     def validate(self):
         parsed = urlsplit(self.origin)
@@ -84,12 +71,16 @@ class Config:
             raise ValueError('Public HTTPS origin and configured users are required')
         if self.registration_enabled and len(self.context_secret) < 32:
             raise ValueError('Registration requires a private identity signing secret')
+        if sum(user.get('role') == 'owner' for user in self.users.values()) != 1:
+            raise ValueError('Exactly one configured owner is required')
         for username, user in self.users.items():
             if not username or len(username) > 64 or user.get('role') not in ('owner', 'viewer') or not user.get('password_hash', '').startswith('pbkdf2_sha256$600000$'):
                 raise ValueError('Invalid demo account configuration')
 
 
-class Store:
+class Store(SecurityStoreMixin):
+    accounts_table = accounts
+    sessions_table = sessions
     def __init__(self, engine):
         self.engine = engine
 
@@ -97,6 +88,7 @@ class Store:
         with self.engine.connect() as connection:
             connection.execute(select(sessions.c.token_hash).limit(1))
             connection.execute(select(accounts.c.username).limit(1))
+            connection.execute(select(security.c.username).limit(1))
 
     def attempt(self, address, now, window=WINDOW, maximum=MAX_ATTEMPTS):
         # One atomic counter shared by all replicas. No in-memory bypass on restart.
@@ -118,10 +110,10 @@ class Store:
 
     def user(self, username, configured):
         if username in configured:
-            return configured[username] | {'workspace': 'main'}
+            return self.configured_user(username, configured)
         with self.engine.connect() as connection:
             row = connection.execute(select(accounts).where(accounts.c.username == username)).mappings().first()
-        return dict(row) | {'role': 'member'} if row else None
+        return dict(row) if row else None
 
     def register(self, username, name, encoded, now):
         user = {'username': username, 'name': name, 'password_hash': encoded,
@@ -153,31 +145,57 @@ class Store:
             return None
         return {'username': row['username'], 'name': user.get('name', row['username']), 'role': user['role'],
                 'workspace': user['workspace'], 'expires': row['expires'],
-                'limits': {'active': 1, 'daily': 3} if user['role'] == 'member' else None}
+                'limits': {'active': 1, 'daily': 3} if user['role'] in ('member', 'admin') else None}
 
     def revoke(self, token):
         with self.engine.begin() as connection:
             connection.execute(delete(sessions).where(sessions.c.token_hash == hashlib.sha256(token.encode()).hexdigest()))
 
 
-def login_page(message='', username='', next_path='/', registration_enabled=False, registering=False, name=''):
+def login_page(message='', username='', next_path='/', registration_enabled=False, registering=False, name='', recovering=False, resetting=False, notice='', reset_token='', security_enabled=True):
     template = (Path(__file__).parent / 'templates/demo_login.html').read_text(encoding='utf-8')
-    extra = ('<label for="name">Как вас зовут</label><input id="name" name="name" autocomplete="name" minlength="2" maxlength="60" required value="' + html.escape(name, quote=True) + '" placeholder="Ваше имя">') if registering else ''
-    confirm = ('<small id="password-hint">От 12 до 128 символов. Можно использовать длинную фразу.</small><label for="password_confirm">Повторите пароль</label><input id="password_confirm" type="password" name="password_confirm" autocomplete="new-password" minlength="12" maxlength="128" required placeholder="Повторите пароль">') if registering else ''
-    switch = ('<p class="switch">Уже есть аккаунт? <a href="/auth/login">Войти</a></p>' if registering else '<p class="switch">Впервые здесь? <a href="/auth/register">Создать аккаунт</a></p>') if registration_enabled else ''
-    values = {'ERROR': '<div class="error" role="alert">' + html.escape(message) + '</div>' if message else '',
-              'USERNAME': html.escape(username, quote=True), 'NEXT': html.escape(safe_next(next_path), quote=True),
-              'TITLE': 'Создайте своё пространство' if registering else 'Добро пожаловать',
-              'PAGE_TITLE': 'Регистрация' if registering else 'Вход',
-              'INTRO': 'Личные исследования, проверяемые источники и сравнение моделей. Одно исследование одновременно, до трёх новых запусков за сутки.' if registering else 'Войдите, чтобы продолжить свои исследования или посмотреть демонстрацию.',
-              'ACTION': '/auth/register' if registering else '/auth/login', 'NAME_FIELD': extra, 'CONFIRM_FIELD': confirm,
-              'PASSWORD_AUTOCOMPLETE': 'new-password' if registering else 'current-password',
-              'PASSWORD_MIN': '12' if registering else '1', 'PASSWORD_MAX': '128' if registering else '1024',
-              'USERNAME_HINT': '<small id="username-hint">3–32 символа: латинские буквы, цифры, точка, дефис и подчёркивание.</small>' if registering else '',
-              'SUBMIT': 'Создать аккаунт' if registering else 'Войти в рабочее пространство', 'SWITCH': switch,
-              'NOTE': 'Сохраните логин и пароль: восстановление доступа пока недоступно. Ваши исследования видны только вам.' if registering else 'Сессия действует 8 часов. Доступ к демонстрации — по реквизитам автора проекта.'}
-    for key, value in values.items():
-        template = template.replace('{{' + key + '}}', value)
+    esc = lambda value: html.escape(value, quote=True)
+    action, title, intro, submit = '/auth/login', 'Добро пожаловать', 'Войдите, чтобы продолжить свои исследования или посмотреть демонстрацию.', 'Войти в рабочее пространство'
+    fields = '<input type="hidden" name="next" value="' + esc(safe_next(next_path)) + '">'
+    if registering:
+        action, title, intro, submit = '/auth/register', 'Создайте своё пространство', 'Личные исследования и проверяемые источники. Одно исследование одновременно, до трёх новых запусков за сутки.', 'Создать аккаунт'
+        fields += '<label for="name">Как вас зовут</label><input id="name" name="name" autocomplete="name" minlength="2" maxlength="60" required value="' + esc(name) + '" placeholder="Ваше имя">'
+    if not resetting:
+        fields += '<label for="username">Имя пользователя</label><input id="username" name="username" autocomplete="username" maxlength="64" required value="' + esc(username) + '" placeholder="Имя пользователя">'
+    if registering:
+        fields += '<small>3–32 символа: латиница, цифры, точка, дефис и подчёркивание.</small>'
+    if recovering:
+        action, title, intro, submit = '/auth/recover', 'Верните доступ к своим исследованиям', 'Укажите логин и способ связи. Администратор проверит запрос и передаст ссылку для смены пароля.', 'Отправить запрос'
+        fields += '<label for="contact">Как с вами связаться</label><input id="contact" name="contact" minlength="3" maxlength="200" required placeholder="Например, ваш Telegram или email"><label for="message">Сообщение администратору · необязательно</label><textarea id="message" name="message" maxlength="500" rows="3" placeholder="Что поможет проверить, что аккаунт принадлежит вам"></textarea>'
+    else:
+        fresh = registering or resetting
+        if resetting:
+            action, title, intro, submit = '/auth/reset', 'Задайте новый пароль', 'Ссылка от администратора действует 15 минут и используется один раз. После сохранения все сессии будут завершены.', 'Сохранить новый пароль'
+            fields += '<input id="reset-token" type="hidden" name="token" value="' + esc(reset_token[:128]) + '">'
+        fields += '<label for="password">' + ('Новый пароль' if resetting else 'Пароль') + '</label><input id="password" type="password" name="password" autocomplete="' + ('new-password' if fresh else 'current-password') + '" minlength="' + ('12' if fresh else '1') + '" maxlength="' + ('128' if fresh else '1024') + '" required placeholder="Введите пароль">'
+        if fresh:
+            fields += '<small>От 12 до 128 символов. Можно использовать длинную фразу.</small><label for="password_confirm">Повторите пароль</label><input id="password_confirm" type="password" name="password_confirm" autocomplete="new-password" minlength="12" maxlength="128" required placeholder="Повторите пароль">'
+    notices = {'password_changed': 'Пароль изменён. Все сессии завершены — войдите с новым паролем.', 'password_reset': 'Пароль восстановлен. Все сессии завершены — войдите с новым паролем.', 'recovery_requested': 'Если такой аккаунт существует, запрос передан администраторам. Дождитесь связи и одноразовой ссылки. Повторный запрос не ускоряет обработку.'}
+    form = '<form id="auth-form" method="post" action="' + action + '">' + fields + '<button type="submit">' + submit + ' <span aria-hidden="true">→</span></button></form>'
+    if notice == 'recovery_requested': form = ''
+    if registering:
+        switch = '<p class="switch">Уже есть аккаунт? <a href="/auth/login">Войти</a></p>'
+        note = 'Ваши исследования видны только вам. Пароль можно изменить в настройках аккаунта, а восстановить — через запрос администратору.'
+    elif recovering or resetting:
+        switch = '<p class="switch"><a href="/auth/login">Вернуться ко входу</a></p>'
+        note = 'Контакт из заявки сам по себе не подтверждает личность. Администратор может запросить дополнительные сведения.' if recovering else 'Не передавайте эту ссылку другим людям. Если она истекла, попросите администратора создать новую.'
+    else:
+        switch = '<p class="switch"><a href="/auth/recover">Забыли пароль?</a></p>' if security_enabled else ''
+        if registration_enabled: switch += '<p class="switch">Впервые здесь? <a href="/auth/register">Создать аккаунт</a></p>'
+        note = 'Сессия действует 8 часов. Доступ к демонстрации — по реквизитам автора проекта.'
+    script = ''
+    if resetting:
+        script = """<script>const field=document.getElementById('reset-token');const fragment=location.hash.slice(1);if(fragment){if(/^[A-Za-z0-9_-]{43}$/.test(fragment))field.value=fragment;history.replaceState(null,'',location.pathname);}if(!field.value){const alert=document.createElement('div');alert.className='error';alert.setAttribute('role','alert');alert.textContent='Ссылка неполная. Откройте ссылку, которую передал администратор.';document.getElementById('auth-form').prepend(alert);document.querySelector('button[type=submit]').disabled=true;}</script>"""
+    values = {'TITLE':title, 'PAGE_TITLE':'Восстановление пароля' if recovering or resetting else 'Регистрация' if registering else 'Вход', 'INTRO':intro,
+        'ERROR':'<div class="error" role="alert">'+esc(message)+'</div>' if message else '',
+        'NOTICE':'<div class="success" role="status">'+notices[notice]+'</div>' if notice in notices else '',
+        'FORM':form,'SWITCH':switch,'NOTE':note,'SCRIPT':script}
+    for key,value in values.items(): template=template.replace('{{'+key+'}}',value)
     return template
 
 
@@ -197,7 +215,7 @@ def create_app(config=None, store=None, transport=None):
     app = FastAPI(title='Venture Lens demo access', docs_url=None, redoc_url=None, openapi_url=None, lifespan=lifespan)
 
     def page(*args, **kwargs):
-        return login_page(*args, registration_enabled=app.state.config.registration_enabled, **kwargs)
+        return login_page(*args, registration_enabled=app.state.config.registration_enabled, security_enabled=app.state.config.security_enabled, **kwargs)
 
     def signed_in(username, user, next_path='/'):
         token = app.state.store.issue(username, user, time.time())
@@ -225,9 +243,9 @@ def create_app(config=None, store=None, transport=None):
         return {'status': 'ready'}
 
     @app.get('/auth/login', response_class=HTMLResponse)
-    def login(request: Request, next: str = '/'):
+    def login(request: Request, next: str = '/', notice: str = ''):
         identity = app.state.store.identity(request.cookies.get(COOKIE), app.state.config.users, time.time())
-        return RedirectResponse(safe_next(next), 303) if identity else HTMLResponse(page(next_path=next))
+        return RedirectResponse(safe_next(next), 303) if identity else HTMLResponse(page(next_path=next, notice=notice))
 
     @app.get('/auth/register', response_class=HTMLResponse)
     def register_page(request: Request):
@@ -322,6 +340,9 @@ def create_app(config=None, store=None, transport=None):
         response.delete_cookie(COOKIE, path='/', secure=True, httponly=True, samesite='lax')
         return response
 
+    if (config.security_enabled if config else os.environ.get('ACCOUNT_SECURITY_ENABLED') == 'true'):
+        install_security_routes(app, page, COOKIE)
+
     @app.api_route('/{path:path}', methods=['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'])
     async def proxy(request: Request, path: str):
         if path.startswith('auth/'):
@@ -334,7 +355,7 @@ def create_app(config=None, store=None, transport=None):
         if request.method not in ('GET', 'HEAD', 'OPTIONS'):
             if request.headers.get('origin') != app.state.config.origin:
                 return JSONResponse({'detail': 'Недопустимый источник запроса'}, 403)
-            if identity['role'] not in ('owner', 'member'):
+            if identity['role'] not in ('owner', 'member', 'admin'):
                 return JSONResponse({'detail': 'Гостевой доступ разрешает только просмотр'}, 403)
         body = bytearray()
         async for chunk in request.stream():

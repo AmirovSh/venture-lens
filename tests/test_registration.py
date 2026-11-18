@@ -52,7 +52,7 @@ def test_registration_persists_hashed_account_and_signs_in(registered):
     client, database, forwarded, _ = registered
     assert 'Создать аккаунт' in client.get('/auth/login').text
     page = client.get('/auth/register')
-    assert page.status_code == 200 and 'восстановление доступа пока недоступно' in page.text
+    assert page.status_code == 200 and 'через запрос администратору' in page.text
     assert '{{' not in page.text
     response = register(client, ' Alice ')
     assert response.status_code == 303 and response.headers['location'] == '/'

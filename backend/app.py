@@ -51,7 +51,7 @@ def lock_admission(s):
 
 
 def member_active_limit(s, request, excluding=None):
-    if request.state.identity['role'] != 'member':
+    if request.state.identity['role'] not in ('member','admin'):
         return
     query = select(Run).where(Run.workspace == request.state.identity['workspace'], Run.status.in_(['queued','running','waiting']))
     if excluding:
@@ -127,7 +127,7 @@ def runs(request:Request):
 @app.get('/api/account')
 def account(request:Request):
     identity=request.state.identity
-    if identity['role']!='member':return {'role':identity['role'],'limits':None}
+    if identity['role'] not in ('member','admin'):return {'role':identity['role'],'limits':None}
     with Session() as s:
         recent=s.scalars(select(Run.created).where(Run.workspace==identity['workspace'],Run.created>time.time()-86400).order_by(Run.created)).all()
         active=s.scalar(select(func.count()).select_from(Run).where(Run.workspace==identity['workspace'],Run.status.in_(['queued','running','waiting'])))
@@ -141,7 +141,7 @@ def create_run(body:ResearchInput,request:Request):
         lock_admission(s)
         member_active_limit(s,request)
         workspace=request.state.identity['workspace']
-        if request.state.identity['role']=='member':
+        if request.state.identity['role'] in ('member','admin'):
             used=s.scalar(select(func.count()).select_from(Run).where(Run.workspace==workspace,Run.created>time.time()-86400))
             if used>=3:raise HTTPException(429,'Лимит: три новых исследования за последние 24 часа. Попробуйте позже.')
         if s.query(Run).filter(Run.status.in_(['queued','running','waiting'])).count()>=int(settings.setting('MAX_ACTIVE_RESEARCH','10')):raise HTTPException(429,'Достигнут лимит одновременных исследований')

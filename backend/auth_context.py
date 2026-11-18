@@ -31,11 +31,11 @@ def verify_identity(headers, secret, now=None):
         workspace = payload['workspace']
         if not isinstance(workspace, str) or not workspace or len(workspace) > 64:
             return None
-        if payload['role'] not in ('owner', 'viewer', 'member'):
+        if payload['role'] not in ('owner', 'viewer', 'member', 'admin'):
             return None
         if payload['role'] in ('owner', 'viewer') and workspace != 'main':
             return None
-        if payload['role'] == 'member' and workspace == 'main':
+        if payload['role'] in ('member', 'admin') and workspace == 'main':
             return None
         return payload
     except (ValueError, TypeError, KeyError):

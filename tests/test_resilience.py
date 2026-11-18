@@ -168,7 +168,7 @@ def test_migration_adopts_legacy_database_without_losing_runs(tmp_path):
     with engine.connect() as connection:
         row=connection.execute(text("SELECT title,generation,active_seconds FROM runs WHERE id='legacy'")).one()
         assert tuple(row)==('Saved',0,0)
-        assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar()=='0003_registration'
+        assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar()=='0004_account_security'
         assert connection.execute(text('SELECT COUNT(*) FROM demo_sessions')).scalar()==0
         assert connection.execute(text('SELECT COUNT(*) FROM demo_login_limits')).scalar()==0
         assert connection.execute(text("SELECT workspace FROM runs WHERE id='legacy'")).scalar()=='main'
