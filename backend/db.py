@@ -86,6 +86,7 @@ class Invocation(Base):
     model = Column(String)
     provider = Column(String,nullable=True)
     prompt_version = Column(String, default='1.1')
+    prompt_text = Column(Text,nullable=True)
     input_hash = Column(String)
     input = Column(Text)
     output = Column(Text, nullable=True)
@@ -109,6 +110,14 @@ class ProviderSlot(Base):
     provider=Column(String,index=True,nullable=False)
     holder=Column(String,nullable=False)
     expires=Column(Float,nullable=False,index=True)
+
+
+class ServiceConfiguration(Base):
+    __tablename__='service_configurations'
+    version=Column(Integer,primary_key=True)
+    data=Column(Text,nullable=False)
+    created=Column(Float,nullable=False,default=time.time)
+    actor=Column(String(90),nullable=False)
 
 
 class EvidenceAction(Base):

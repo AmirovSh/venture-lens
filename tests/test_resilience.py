@@ -98,7 +98,7 @@ def test_independent_llm_fallback_preserves_separate_credentials(store,monkeypat
         if 'primary' in route['url']:raise TransportError('HTTP 503',503)
         return {'choices':[{'message':{'content':'{"candidates":[]}'}}],'usage':{'total_tokens':50}}
     monkeypatch.setattr(llm,'completion',completion)
-    assert llm.invoke('run','discovery',{},Discovery,'Return JSON')=={'candidates':[]}
+    assert llm.invoke('run','discovery',{},Discovery,'Return JSON')=={'candidates':[],'coverage_sufficient':False,'coverage_summary':''}
     assert calls[0]['key']=='PRIMARY_TEST_KEY' and calls[1]['key']=='BACKUP_TEST_KEY'
     with store() as s:assert s.query(db.Invocation).filter_by(status='completed').one().provider!=s.query(db.Invocation).filter_by(status='failed').one().provider
 
@@ -168,7 +168,7 @@ def test_migration_adopts_legacy_database_without_losing_runs(tmp_path):
     with engine.connect() as connection:
         row=connection.execute(text("SELECT title,generation,active_seconds FROM runs WHERE id='legacy'")).one()
         assert tuple(row)==('Saved',0,0)
-        assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar()=='0005_decision_workspace'
+        assert connection.execute(text('SELECT version_num FROM alembic_version')).scalar()=='0006_product_controls'
         assert connection.execute(text('SELECT COUNT(*) FROM pilots')).scalar()==0
         assert connection.execute(text('SELECT COUNT(*) FROM evidence_actions')).scalar()==0
         assert connection.execute(text('SELECT COUNT(*) FROM user_preferences')).scalar()==0

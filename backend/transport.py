@@ -30,9 +30,9 @@ def completion(payload,timeout,route=None):
         body,status,delay=result.stdout.rsplit(b'\n',2)
         if status!=b'200':raise TransportError(f'LLM HTTP {status.decode(errors="replace")}',int(status),retry_delay(delay.decode()))
         return json.loads(body)
-    context=ssl.create_default_context(cafile=setting('LLM_CA_FILE') or None)
-    if setting('LLM_CLIENT_CERT_FILE'):context.load_cert_chain(setting('LLM_CLIENT_CERT_FILE'),setting('LLM_CLIENT_KEY_FILE') or None)
-    with httpx.Client(timeout=timeout,trust_env=TRUST_ENV,verify=context) as c:
+    context=ssl.create_default_context(cafile=None if route.get('isolated_tls') else setting('LLM_CA_FILE') or None)
+    if not route.get('isolated_tls') and setting('LLM_CLIENT_CERT_FILE'):context.load_cert_chain(setting('LLM_CLIENT_CERT_FILE'),setting('LLM_CLIENT_KEY_FILE') or None)
+    with httpx.Client(timeout=timeout,trust_env=False if route.get('isolated_tls') else TRUST_ENV,verify=context) as c:
         response=c.post(route['url']+'/chat/completions',headers={'Authorization':'Bearer '+route['key']},json=payload)
         if not response.is_success:raise TransportError(f'LLM HTTP {response.status_code}',response.status_code,retry_delay(response.headers.get('retry-after')))
         return response.json()

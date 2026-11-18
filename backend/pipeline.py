@@ -1,3 +1,4 @@
+from .runtime_config import default_prompt
 import hashlib
 import copy
 import time
@@ -50,41 +51,78 @@ def context_sources(sources,max_total_chars=24000):
     return result
 
 def discover(run_id):
+    from .runtime_config import PROFILES,market_label
     guard(run_id)
     with Session() as s:
-        r=s.get(Run,run_id); config=read(r.settings); pol=read(r.policy)
+        r=s.get(Run,run_id);config=read(r.settings);pol=read(r.policy)
         if s.query(Model).filter_by(run_id=run_id).count():return
-    emit(run_id,'discovery','Ищем бизнес-модели и компании-примеры в открытых источниках')
-    market={'US':'United States','UK':'United Kingdom','EU':'European Union','Global':'US Europe excluding CIS'}[config['region']]
-    sources=[]
-    for url in pol.get('discovery_urls',[]):
-        try:sources.append(fetch(url))
-        except Exception:source_errors(run_id)('Каталог недоступен',url)
+    market={'US':'United States','UK':'United Kingdom','EU':'European Union','Global':'international markets'}.get(config['region'],config.get('market',''))
+    sources=config.get('discovery_sources',[])
     if not sources:
-        sources=collect(['SaaS','B2B software'],max_sources=6,on_error=source_errors(run_id))
+        emit(run_id,'discovery','Ищем источники под выбранный рынок и направление',payload={'market':market_label(config),'sampling':config.get('sampling','legacy')})
+        for url in config.get('source_urls',[]):
+            try:sources.append(fetch(url))
+            except (Cancelled,DependencyUnavailable):raise
+            except Exception:source_errors(run_id)('Добавленный источник недоступен или заблокирован проверкой URL',url)
+        try:
+            sources.extend(collect([f"{config['focus']} {market} subscription companies examples",f"{market} B2B software business models {config['focus']}"],max_sources=6,on_error=source_errors(run_id)))
+        except (Cancelled,DependencyUnavailable):
+            if not sources:
+                # Known catalogues are examples only; selected market remains mandatory.
+                for url in pol.get('discovery_urls',[]):
+                    try:sources.append(fetch(url))
+                    except Exception:source_errors(run_id)('Резервный каталог недоступен',url)
+            if not sources:raise
+        except Exception:
+            for url in pol.get('discovery_urls',[]):
+                try:sources.append(fetch(url))
+                except Exception:source_errors(run_id)('Резервный каталог недоступен',url)
+        sources=list({item['id']:item for item in sources}.values())
+        if not sources:raise RuntimeError('Нет доступных источников для выбранного рынка. Добавьте свои ссылки и повторите поиск.')
+        with Session.begin() as s:
+            r=assert_owner(s,run_id);value=read(r.settings);value['discovery_sources']=sources;r.settings=dump(value)
+    profile=PROFILES.get(config.get('sampling','balanced'),PROFILES['balanced'])
+    adaptive=config.get('adaptive_selection',False)
+    rounds=profile['rounds'] if adaptive else 1
+    progress=config.get('selection_progress',{})
+    candidates=progress.get('candidates',[]);completed=progress.get('round',0)
+    seen={normalize(item.get('business_model_key') or item['name']).casefold() for item in candidates}
+    valid_ids={item['id'] for item in sources}
+    cap=config['count'];reason='depth_limit';coverage=progress.get('coverage','')
+    for round_index in range(completed,rounds):
+        guard(run_id)
+        with Session() as s:
+            r=s.get(Run,run_id)
+            available=max(0,(pol['limits']['max_llm_calls']-r.calls-1)//5-len(candidates))
+        if not available:reason='request_budget';break
+        remaining=min(cap-len(candidates),available)
+        if remaining<=0:reason='depth_limit';break
+        packet={'market':market,'focus':config['focus'],'team':config['team'],'budget':config['budget'],'batch_size':min(4,remaining) if adaptive else remaining,
+                'existing_models':[{k:item.get(k) for k in ('name','company','business_model_key')} for item in candidates],'sources':context_sources(sources)}
+        result=invoke(run_id,'discovery',packet,Discovery,default_prompt('discovery'),max_tokens=12000)
+        new=[]
+        for candidate in result['candidates']:
+            key=normalize(candidate.get('business_model_key') or candidate['name']).casefold()
+            if candidate['discovery_source_id'] not in valid_ids or key in seen:continue
+            seen.add(key);new.append(candidate)
+            if len(new)>=packet['batch_size']:break
+        candidates.extend(new);coverage=result.get('coverage_summary','')
+        with Session.begin() as s:
+            r=assert_owner(s,run_id);value=read(r.settings)
+            value['selection_progress']={'round':round_index+1,'candidates':candidates,'coverage':coverage};r.settings=dump(value)
+        emit(run_id,'discovery',f'Добавлено новых гипотез: {len(new)}. Всего: {len(candidates)}.',payload={'round':round_index+1,'coverage':coverage})
+        if not new:reason='no_new_hypotheses';break
+        if adaptive and result.get('coverage_sufficient') and len(candidates)>=2:reason='coverage';break
+    if not candidates:raise RuntimeError('Источники не дали проверяемых гипотез под заданные условия. Уточните направление или добавьте источники.')
     with Session.begin() as s:
-        # Preserve discovery provenance even when the provider fails.
-        assert_owner(s,run_id)
-        r=s.get(Run,run_id); c=read(r.settings);c['discovery_sources']=sources;r.settings=dump(c)
-    result=invoke(run_id,'discovery',{'market':market,'focus':config['focus'],'count':config['count'],'sources':context_sources(sources)},Discovery,
-        'Извлеки указанное число РАЗЛИЧНЫХ бизнес-моделей из данных источников. Не дублируй одну модель под разными компаниями. '
-        'discovery_source_id обязан существовать в источниках. query — поисковый запрос на английском для проверки компании, продукта и оценки. '
-        'name и description описывают НАШУ гипотезу продукта, покупателя и повторяемой выручки; company — только компания-аналог. '
-        'business_model_key — короткий английский ключ вида customer-product-revenue, одинаковый для смысловых дублей. '
-        'Не требуется, чтобы все модели прошли фильтры; допускаются кандидаты для обоснованного отклонения. Не выдумывай недостающих кандидатов.',max_tokens=12000)
-    guard(run_id)
-    valid_ids={x['id'] for x in sources};seen=set();candidates=[]
-    for candidate in result['candidates']:
-        key=normalize(candidate['name']).casefold()
-        if candidate['discovery_source_id'] not in valid_ids or key in seen:continue
-        seen.add(key);candidates.append(candidate)
-    if not candidates:raise RuntimeError('Источники не дали проверяемых кандидатов')
-    with Session.begin() as s:
-        assert_owner(s,run_id)
-        for candidate in candidates[:config['count']]:
-            m=Model(id=uid(),run_id=run_id,name=candidate['name'],company=candidate['company'],data=dump({'candidate':candidate,'discovery_source':next(x for x in sources if x['id']==candidate['discovery_source_id'])}))
+        r=assert_owner(s,run_id);value=read(r.settings)
+        value['selection']={'mode':'adaptive' if adaptive else 'legacy','sampling':config.get('sampling','balanced'),'found':len(candidates),'stop_reason':reason,'coverage':coverage,'source_count':len(sources)}
+        value.pop('selection_progress',None);r.settings=dump(value)
+        for candidate in candidates:
+            m=Model(id=uid(),run_id=run_id,name=candidate['name'],company=candidate['company'],data=dump({'candidate':candidate,'discovery_source':next(item for item in sources if item['id']==candidate['discovery_source_id'])}))
             s.add(m);s.flush();s.add(Job(run_id=run_id,model_id=m.id,key=f'model:{m.id}'))
-    emit(run_id,'discovery',f'Получено {len(candidates[:config["count"]])} различных кандидатов',payload={'requested':config['count'],'found':len(candidates[:config['count']])})
+    emit(run_id,'discovery',f'Подбор завершён: {len(candidates)} разных гипотез для проверки.',payload={'found':len(candidates),'stop_reason':reason,'coverage':coverage})
+
 
 def apply_evidence(assessment,sources,pol):
     seen=set()
@@ -140,13 +178,14 @@ def process_model(model_id):
     if 'sources' not in data:
         emit(run_id,'dossier',f'Собираем досье: {candidate["company"]}',model_id)
         try:
-            data['sources']=collect([candidate['company'], f'{candidate["company"]} pricing',f'{candidate["company"]} valuation'],pol['limits']['max_sources_per_model'],source_errors(run_id,model_id))
+            data['sources']=collect([candidate.get('query') or candidate['company'],f'{candidate["company"]} {config.get("market") or config["region"]} pricing',f'{candidate["company"]} valuation'],pol['limits']['max_sources_per_model'],source_errors(run_id,model_id))
         except (Cancelled,DependencyUnavailable):raise
         except Exception:
             if not data.get('discovery_source'):raise
             data['sources']=[data['discovery_source']]
             emit(run_id,'source_warning','Поиск недоступен: предварительная карточка ограничена исходным каталогом. Пробелы не заполняются фактами из памяти.',model_id)
-        for url in data.get('additional_source_urls',[])[:10]:
+        manual=[item['url'] for item in config.get('manual_sources',[]) if item.get('model_id') in (None,model_id)]
+        for url in list(dict.fromkeys(data.get('additional_source_urls',[])+manual))[:10]:
             if any(source['url']==url for source in data['sources']):continue
             try:data['sources'].append(fetch(url))
             except (Cancelled,DependencyUnavailable):raise
@@ -155,21 +194,8 @@ def process_model(model_id):
     guard(run_id)
     if 'assessment' not in data:
         emit(run_id,'screening','Проверяем обязательные условия и готовим сопоставимые оценки',model_id)
-        result=invoke(run_id,'screening',{'candidate':candidate,'conditions':business_conditions(config),'criteria':pol['criteria'],'weights':pol['weights'],'sources':context_sources(data['sources'])},Assessment,
-            'Оцени возможность НАШЕГО запуска теста и первой оплаты за 90 дней в указанной юрисдикции и команде. '
-            'gates: ровно все criteria с их id. dimensions: ровно все weights с их id. Шкала 0..5; null если нет оснований. '
-            '5 = доступен дешёвый быстрый самостоятельный запуск и покупка; 0 = практически невозможно за 90 дней. '
-            'Для gate pass/reject обязательны claim_ids с цитатами источников. Не подменяй оценку компании суммой инвестиций или выручкой. '
-            'Юридическая неопределённость = review; CIS исключён. Данные о лицензиях нужны для предполагаемой нашей модели. '
-            'Для legal_online связывай claim_ids с фактом о типе продукта и его деятельности; вывод об отсутствии своей лицензии — явно model_judgment, не юридическая гарантия. '
-            'benchmark: отдельный тип метрики и сумма в USD, ссылка claim_id на паспорт доказательства. funding_raised/revenue НЕ valuation. '
-            'Условие крупного аналога — подтверждённая оценка/капитализация/сделка порядка $300м и выше с датой. '
-            'Оценки скорости и продаж — суждения с явными предпосылками; не придумывай CAC, сроки и покупателей. '
-            'Каждому существенному утверждению карточки дай паспорт в claims. experiment: 3 этапа 1–14, 15–30, 31–90 дней с success и stop. '
-            'Заполни launch_brief: НАШ продукт, первый покупатель, доступный канал привлечения и команда. '
-            'budget_usd — диапазон затрат на первый минимальный эксперимент (USD), first_payment_days — диапазон дней до первой оплаты. '
-            'Это суждения, а не установленные факты: дай basis и assumptions. Неизвестные границы оставь null с human_required. '
-            'Не подменяй оценку затрат выделенным бюджетом conditions.budget. Для calculation укажи claim_ids исходных данных.',model_id)
+        result=invoke(run_id,'screening',{'candidate':candidate,'conditions':business_conditions(config),'criteria':pol['criteria'],'weights':pol['weights'],'sources':context_sources(data['sources'],pol['limits'].get('context_chars',24000))},Assessment,
+            default_prompt('screening'),model_id)
         data['assessment']=apply_evidence(result,data['sources'],pol)
         save_model(model_id,data,stage='critique')
     assessment=data['assessment']
@@ -187,11 +213,8 @@ def process_model(model_id):
     guard(run_id)
     if 'critique' not in data:
         emit(run_id,'critique','Независимый критик ищет причины срыва запуска',model_id)
-        data['critique']=invoke(run_id,'critic',{'candidate':candidate,'conditions':business_conditions(config),'sources':context_sources(data['sources'])},Critique,
-            'Найди 1–3 САМЫЕ СИЛЬНЫЕ причины, почему за 90 дней не получим первую оплату. Ты не видишь оценки других агентов. '
-            'Отделяй проверяемое фактическое утверждение factual=true от прогноза/суждения factual=false. '
-            'Не выдумывай факты и источники. Для каждого риска укажи метод, уверенность, source_id и дословную quote либо null, source_date либо null. '
-            'Для суждений метод model_judgment или human_required. search_query — нейтральный запрос для независимого поиска факта.',model_id,max_tokens=8000)
+        data['critique']=invoke(run_id,'critic',{'candidate':candidate,'conditions':business_conditions(config),'sources':context_sources(data['sources'],pol['limits'].get('context_chars',24000))},Critique,
+            default_prompt('critic'),model_id,max_tokens=8000)
         save_model(model_id,data,stage='verification')
     guard(run_id)
     if data.get('verification') and data['verification'].get('contract_version')!='3.0':
@@ -208,25 +231,15 @@ def process_model(model_id):
         if factual:
             if 'verification_queries' not in data:
                 plan=invoke(run_id,'verification_search',{'company':candidate['company'],'claims':claims},SearchPlan,
-                    'Ты независимый фактчекер. Сформулируй до трёх нейтральных коротких поисковых запросов на АНГЛИЙСКОМ (до 10 слов каждый). '
-                    'Извлекай проверяемые факты из составного тезиса отдельно от прогноза. Ищи подтверждения и опровержения. '
-                    'Пример: Company pricing implementation onboarding. Не используй длинные цитаты целиком и не доверяй тезису заранее.',model_id,max_tokens=1500)
+                    default_prompt('verification_search'),model_id,max_tokens=1500)
                 data['verification_queries']=plan['queries'];save_model(model_id,data,stage='verification')
             try:
                 if not verified_sources and not data.get('reuse_verification_sources'):verified_sources=collect(data['verification_queries'],pol['limits']['max_sources_per_model'],source_errors(run_id,model_id))
             except (Cancelled,DependencyUnavailable):raise
             except Exception:emit(run_id,'source_warning','Независимый поиск недоступен; проверка помечается как неподтверждённая',model_id)
         data['verification_sources']=verified_sources
-        result=invoke(run_id,'verifier',{'company':candidate['company'],'claims':claims,'sources':context_sources(verified_sources)},Verification,
-            'Независимо проверь каждый claims по sources. Ты не видишь автора тезиса, его оценки, уверенности и вердикта. '
-            'Не соглашайся автоматически: ищи опровержения и область применимости. Без достаточного источника — unknown. '
-            'Для factual=false — judgment: прогноз не проверяется цитатой. supported/refuted/partial только с точной цитатой. '
-            'Источник из поискового фрагмента недостаточен для supported. checks: ровно один на каждый claim_id. Даты не угадывай. '
-            'criterion_impacts: перечисли только обязательные условия, которым прямо противоречит подтверждённый факт (contradicts) '
-            'или для которых он создаёт существенное неразрешённое противоречие (uncertain). Иначе пустой список. '
-            'Длинные продажи и низкий индекс сами по себе не нарушают эти условия. Не делай выводов о лицензиях нашей модели из одной лишь лицензии компании-аналога. '
-            'Оценка или капитализация выше $300 млн ПОДТВЕРЖДАЕТ large_analogue и не является противоречием этому условию. '
-            'Обязательные условия: '+dump(pol['criteria']),model_id,max_tokens=5000)
+        result=invoke(run_id,'verifier',{'company':candidate['company'],'claims':claims,'sources':context_sources(verified_sources,pol['limits'].get('context_chars',24000))},Verification,
+            default_prompt('verifier'),model_id,max_tokens=5000)
         checks={x['claim_id']:x for x in result['checks']}
         validated=[]
         for claim in claims:

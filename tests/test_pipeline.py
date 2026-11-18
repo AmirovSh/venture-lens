@@ -134,7 +134,7 @@ def test_retry_resumes_failed_job_and_export_reads_persisted_decision(store,monk
     assert exported['models'][0]['decision']=='shortlist'
     assert exported['models'][0]['note']=='Проверить продажи'
     assert exported['models'][0]['status']=='queued'
-    assert client.post('/api/runs',json={'count':9}).status_code==422
+    assert client.post('/api/runs',json={'count':0}).status_code==422
     assert client.post('/api/runs/run/cancel',headers={'Origin':'https://attacker.example'}).status_code==403
 
 def test_ssrf_blocks_loopback_and_private_addresses():
@@ -163,7 +163,7 @@ def test_llm_call_logs_schema_boundary_and_no_auth_material(store,monkeypatch):
         return {'choices':[{'message':{'content':'{"candidates":[]}'}}],'usage':{'total_tokens':100}}
     monkeypatch.setattr(llm,'completion',completion)
     result=llm.invoke('run','discovery',{'sources':[]},Discovery,'Extract candidates',max_tokens=1000)
-    assert result=={'candidates':[]}
+    assert result=={'candidates':[],'coverage_sufficient':False,'coverage_summary':''}
     assert seen[0]['response_format']['json_schema']['strict'] is True
     with store() as s:
         call=s.query(db.Invocation).one();r=s.get(db.Run,'run')

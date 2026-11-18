@@ -42,7 +42,7 @@ accounts = Table('registered_users', metadata, Column('username', String(64), pr
                  Column('role', String(16), nullable=False, server_default='member', default='member'))
 preferences = Table('user_preferences',metadata,Column('username',String(64),primary_key=True),
                     Column('onboarding_enabled',Integer,nullable=False,server_default='1'),
-                    Column('onboarding_seen_version',Integer,nullable=False,server_default='0'),Column('updated',Float,nullable=False))
+                    Column('onboarding_seen_version',Integer,nullable=False,server_default='0'),Column('onboarding_seen_sections',String,nullable=False,server_default='[]'),Column('updated',Float,nullable=False))
 
 
 def safe_next(value):
@@ -342,7 +342,8 @@ def create_app(config=None, store=None, transport=None):
         with app.state.store.engine.connect() as connection:
             row=connection.execute(select(preferences).where(preferences.c.username==identity['username'])).mappings().first()
         return {'onboarding_enabled':bool(row['onboarding_enabled']) if row else True,
-                'onboarding_seen_version':row['onboarding_seen_version'] if row else 0}
+                'onboarding_seen_version':row['onboarding_seen_version'] if row else 0,
+                'onboarding_seen_sections':json.loads(row['onboarding_seen_sections']) if row else []}
 
     @app.patch('/auth/preferences')
     def set_preferences(body:OnboardingPreferences,request:Request):
@@ -351,10 +352,16 @@ def create_app(config=None, store=None, transport=None):
         if not identity:return JSONResponse({'detail':'Войдите в сервис'},401)
         engine=app.state.store.engine
         insert=__import__('sqlalchemy.dialects.postgresql' if engine.dialect.name=='postgresql' else 'sqlalchemy.dialects.sqlite',fromlist=['insert']).insert
-        values={'username':identity['username'],**body.model_dump(),'updated':time.time()}
         with engine.begin() as connection:
+            if engine.dialect.name=='postgresql':
+                lock=int.from_bytes(hashlib.sha256(('guide:'+identity['username']).encode()).digest()[:8],'big')%(2**63)
+                connection.execute(text('SELECT pg_advisory_xact_lock(:lock)'),{'lock':lock})
+            row=connection.execute(select(preferences).where(preferences.c.username==identity['username'])).mappings().first()
+            sections=list(dict.fromkeys((json.loads(row['onboarding_seen_sections']) if row else [])+body.onboarding_seen_sections))
+            result={'onboarding_enabled':body.onboarding_enabled,'onboarding_seen_version':max(body.onboarding_seen_version,row['onboarding_seen_version'] if row else 0),'onboarding_seen_sections':sections}
+            values={'username':identity['username'],**result,'onboarding_seen_sections':json.dumps(sections),'updated':time.time()}
             connection.execute(insert(preferences).values(**values).on_conflict_do_update(index_elements=[preferences.c.username],set_={key:value for key,value in values.items() if key!='username'}))
-        return body.model_dump()
+        return result
 
     @app.post('/auth/logout')
     def logout(request: Request):

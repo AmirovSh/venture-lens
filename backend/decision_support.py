@@ -13,7 +13,7 @@ CRITERION_ACTIONS={
 
 def business_conditions(settings):
     # The research title is a UI label, never a product requirement.
-    return {key:settings[key] for key in ('region','budget','team','focus') if key in settings}
+    return {key:settings[key] for key in ('region','market','budget','team','focus') if key in settings}
 
 
 def tasks_for(data,policy):

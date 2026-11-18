@@ -214,8 +214,8 @@ def test_first_login_preferences_persist_per_account_including_guest(registered)
     client,_,_,_=registered
     assert client.get('/auth/preferences').status_code==401
     assert register(client).status_code==303
-    assert client.get('/auth/preferences').json()=={'onboarding_enabled':True,'onboarding_seen_version':0}
-    preference={'onboarding_enabled':False,'onboarding_seen_version':1}
+    assert client.get('/auth/preferences').json()=={'onboarding_enabled':True,'onboarding_seen_version':0,'onboarding_seen_sections':[]}
+    preference={'onboarding_enabled':False,'onboarding_seen_version':1,'onboarding_seen_sections':[]}
     assert write(client,'/auth/preferences',preference,method='PATCH').json()==preference
     assert client.patch('/auth/preferences',json=preference,headers={'Origin':'https://evil.invalid'}).status_code==403
     assert write(client,'/auth/logout').status_code==303

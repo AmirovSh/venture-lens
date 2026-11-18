@@ -4,6 +4,7 @@ import json
 import threading
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse,StreamingResponse
+from fastapi.exceptions import RequestValidationError
 from starlette.background import BackgroundTask
 from sqlalchemy import select, update, text,func
 from sqlalchemy.exc import SQLAlchemyError
@@ -19,6 +20,13 @@ async def lifespan(app):
     init();yield
 
 app=FastAPI(title='Venture Lens',version='0.1.0',lifespan=lifespan)
+from .control_api import router as control_router
+app.include_router(control_router)
+
+@app.exception_handler(RequestValidationError)
+async def safe_validation_error(request,error):
+    # Validation responses must not echo credentials from administrator settings.
+    return JSONResponse({'detail':[{key:value for key,value in item.items() if key in ('loc','msg','type')} for item in error.errors()]},status_code=422)
 
 @app.middleware('http')
 async def local_guard(request:Request,call_next):
@@ -109,7 +117,10 @@ def serialize_run(s,r,detail=False):
 
 @app.get('/api/health')
 def health():
-    return {'status':'ok','llm_configured':bool(settings.BASE_URL and settings.API_KEY),'llm_model':settings.MODEL,'database':'sqlite' if settings.DATABASE_URL.startswith('sqlite') else 'postgresql','search':'searxng' if settings.setting('SEARXNG_URL') else 'exa' if settings.setting('EXA_API_KEY') else 'public_search','policy':settings.policy()}
+    from . import runtime_config
+    _,config=runtime_config.current();policy=settings.policy()
+    policy['limits'].update(max_llm_calls=config['research_max_calls'],max_total_tokens=config['research_max_tokens'])
+    return {'status':'ok','llm_configured':runtime_config.configured(),'llm_model':config['models']['discovery'],'database':'sqlite' if settings.DATABASE_URL.startswith('sqlite') else 'postgresql','search':'searxng' if settings.setting('SEARXNG_URL') else 'exa' if settings.setting('EXA_API_KEY') else 'public_search','policy':policy}
 
 @app.get('/api/live')
 def live():return {'status':'alive'}
@@ -168,7 +179,8 @@ def account(request:Request):
 
 @app.post('/api/runs',status_code=201)
 def create_run(body:ResearchInput,request:Request):
-    if not settings.BASE_URL or not settings.API_KEY:raise HTTPException(503,'Настройте подключение к корпоративному LLM')
+    from . import runtime_config
+    if not runtime_config.configured():raise HTTPException(503,'Сервер моделей не настроен. Обратитесь к администратору.')
     with Session.begin() as s:
         lock_admission(s)
         member_active_limit(s,request)
@@ -177,7 +189,8 @@ def create_run(body:ResearchInput,request:Request):
             used=s.scalar(select(func.count()).select_from(Run).where(Run.workspace==workspace,Run.created>time.time()-86400))
             if used>=3:raise HTTPException(429,'Лимит: три новых исследования за последние 24 часа. Попробуйте позже.')
         if s.query(Run).filter(Run.status.in_(['queued','running','waiting'])).count()>=int(settings.setting('MAX_ACTIVE_RESEARCH','10')):raise HTTPException(429,'Достигнут лимит одновременных исследований')
-        r=Run(id=uid(),workspace=workspace,title=body.title,settings=dump(body.model_dump()),policy=dump(settings.policy()))
+        config,policy=runtime_config.prepare_research(body,s)
+        r=Run(id=uid(),workspace=workspace,title=body.title,settings=dump(config),policy=dump(policy))
         s.add(r);s.flush();s.add(Job(run_id=r.id,key=f'discovery:{r.id}'))
         return {'id':r.id}
 
@@ -196,7 +209,7 @@ def events(id:str,request:Request,after:int=0):
 def audit(id:str,request:Request):
     with Session() as s:
         get_run(s,id,request)
-        return [{k:getattr(x,k) for k in ['id','model_id','role','model','prompt_version','input_hash','tokens','status','created']}|{'input':read(x.input),'output':x.output} for x in s.scalars(select(Invocation).where(Invocation.run_id==id).order_by(Invocation.created))]
+        return [{k:getattr(x,k) for k in ['id','model_id','role','model','prompt_version','input_hash','tokens','status','created']}|{'input':read(x.input),'output':x.output,'prompt':x.prompt_text} for x in s.scalars(select(Invocation).where(Invocation.run_id==id).order_by(Invocation.created))]
 
 @app.post('/api/runs/{id}/cancel')
 def cancel(id:str,request:Request):
@@ -305,7 +318,7 @@ def reassess_model(id:str,request:Request):
         limits=read(run.policy)['limits']
         if run.calls+5>limits['max_llm_calls'] or run.tokens+30000>limits['max_total_tokens']:raise HTTPException(409,'Для перепроверки недостаточно бюджета LLM. Создайте новое исследование.')
         data=read(model.data)
-        links=[]
+        links=list(read(model.data).get('additional_source_urls',[]))
         for urls in s.scalars(select(EvidenceAction.source_urls).where(EvidenceAction.model_id==id)):
             links.extend(read(urls))
         history=data.get('analysis_history',[])
@@ -318,6 +331,8 @@ def reassess_model(id:str,request:Request):
         if not job:job=Job(run_id=run.id,model_id=id,key='model:'+id);s.add(job)
         job.status='queued';job.epoch=(job.epoch or 0)+1;job.attempts=0;job.next_retry_at=0;job.lease_owner=None;job.lease_until=0
         run.status='queued';run.error='';run.waiting_reason='';run.generation+=1;run.updated=time.time()
+        from .runtime_config import snapshot
+        run_policy=read(run.policy);run_policy['agent_config']=snapshot(s);run.policy=dump(run_policy)
         s.add(Event(run_id=run.id,model_id=id,stage='reassess',message='Повторный отбор с новыми материалами. Предыдущая версия сохранена.',payload=dump({'additional_sources':len(kept['additional_source_urls'])})))
     return {'status':'queued'}
 

@@ -8,11 +8,20 @@ class Strict(BaseModel):
 
 class ResearchInput(Strict):
     title: str = Field(default='Новые возможности', min_length=2, max_length=120)
-    region: Literal['US', 'UK', 'EU', 'Global'] = 'US'
-    count: int = Field(default=12, ge=10, le=15)
+    region: Literal['US', 'UK', 'EU', 'Global', 'Custom'] = 'Global'
+    market: str = Field(default='',max_length=120)
+    sampling: Literal['quick','balanced','deep'] = 'balanced'
+    count: int | None = Field(default=None,ge=1,le=30)
+    source_urls: list[str] = Field(default_factory=list,max_length=10)
     budget: int = Field(default=10000, ge=100, le=1000000)
     team: str = Field(default='2 разработчика и основатель, B2B-продажи с нуля', min_length=5, max_length=500)
     focus: str = Field(default='Онлайн-сервисы для малого и среднего бизнеса', max_length=500)
+
+    @model_validator(mode='after')
+    def market_required(self):
+        if self.region=='Custom' and len(self.market.strip())<2:raise ValueError('Укажите страну или регион исследования')
+        self.source_urls=validate_source_urls(self.source_urls)
+        return self
 
 class Candidate(Strict):
     name: str
@@ -24,6 +33,8 @@ class Candidate(Strict):
 
 class Discovery(Strict):
     candidates: list[Candidate]
+    coverage_sufficient: bool = False
+    coverage_summary: str = ''
 
 class Claim(Strict):
     id: str
@@ -199,4 +210,29 @@ class PilotInput(Strict):
 
 class OnboardingPreferences(Strict):
     onboarding_enabled: bool
-    onboarding_seen_version: int = Field(ge=0,le=1)
+    onboarding_seen_version: int = Field(ge=0,le=2)
+    onboarding_seen_sections: list[str] = Field(default_factory=list,max_length=30)
+    @field_validator('onboarding_seen_sections')
+    @classmethod
+    def known_sections(cls,sections):
+        allowed={'overview','sources','activity','agents','settings','model_settings','new_research','compare','card_overview','card_evidence','card_risks','card_tasks','card_plan','card_agents'}
+        if any(section not in allowed for section in sections):raise ValueError('Неизвестный раздел инструкции')
+        return list(dict.fromkeys(sections))
+
+
+def validate_source_urls(urls):
+    result=[]
+    for url in urls:
+        p=urlsplit(url)
+        if len(url)>2000 or p.scheme not in ('http','https') or not p.hostname or p.username or p.password or p.port not in (None,80,443) :
+            raise ValueError('Добавляйте полные публичные HTTP(S)-ссылки без пароля и фрагмента')
+        result.append(p._replace(fragment='').geturl())
+    return list(dict.fromkeys(result))
+
+
+class SourceLinksInput(Strict):
+    model_id: str | None = Field(default=None,max_length=64)
+    urls: list[str] = Field(min_length=1,max_length=5)
+    @field_validator('urls')
+    @classmethod
+    def validate_urls(cls,urls):return validate_source_urls(urls)

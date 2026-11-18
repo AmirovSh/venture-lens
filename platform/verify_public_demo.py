@@ -80,8 +80,8 @@ def main():
     sample = json.loads(request('/api/runs/' + runs[0]['id'], token=guest)[2])
     assert request('/api/runs/' + runs[0]['id'] + '/export', token=guest)[0] == 200
     # An invalid research body must reach validation for the owner, but never for the guest.
-    assert request('/api/runs', 'POST', {'count': 1}, owner)[0] == 422
-    assert request('/api/runs', 'POST', {'count': 1}, guest)[0] == 403
+    assert request('/api/runs', 'POST', {'count': 0}, owner)[0] == 422
+    assert request('/api/runs', 'POST', {'count': 0}, guest)[0] == 403
     if args.restart_auth:
         with connect() as client:
             execute(client, 'k3s kubectl -n venture-lens-demo rollout restart deployment/demo-access\n'
@@ -128,7 +128,7 @@ def main():
                 sources = model['data'].get('sources', [])
                 if sources:
                     assert request('/api/sources/' + sources[0]['sha256'], token=token)[0] == 404
-            assert request('/api/runs', 'POST', {'count': 1}, token)[0] == 422
+            assert request('/api/runs', 'POST', {'count': 0}, token)[0] == 422
             assert request('/auth/logout', 'POST', b'', token)[0] == 303
             assert request('/auth/session', token=token)[0] == 401
             registered.append(account | {'workspace': identity['workspace']})

@@ -1,3 +1,4 @@
+from backend.runtime_config import default_prompt
 """Enrich inactive real cards with labelled launch hypotheses; never changes admission or ranking."""
 import argparse
 import hashlib
@@ -29,15 +30,7 @@ def main(run_id=None,model_id=None,replace=False):
             packet={'hypothesis':data['candidate'],'conditions':business_conditions(read(run.settings)),
                     'existing_card':{key:data['assessment'].get(key) for key in ('summary','customer','problem','revenue','first_sale','experiment','unknowns','claims')}}
         brief=invoke(rid,'launch_brief',packet,LaunchBrief,
-            'Составь краткое предложение НАШЕГО запуска, используя только existing_card и условия. '
-            'Компания — аналог, а не наш продукт. product обязан описывать продукт и клиента, а не только название компании. '
-            'Сохраняй тип деятельности из hypothesis/existing_card. Не превращай CRM, например, в VPS/VPN. '
-            'Техническое название исследования и инфраструктура стенда не являются бизнес-моделью. '
-            'Если сегмент не подтверждён, так и напиши; не придумывай подтверждённых покупателей. Не добавляй новые внешние факты. Пиши по-русски. '
-            'Оцени диапазон USD на первый минимальный эксперимент и дней до первой оплаты, а не полную разработку. '
-            'Укажи basis, assumptions и метод model_judgment; при недостатке оснований обе границы null и human_required. '
-            'Бюджет conditions — лимит, не оценка затрат. Не придумывай рыночный CAC и подтверждённых покупателей. '
-            'calculation допустим только при наличии исходных claim_ids. Сформулируй конкретный первый сегмент, канал и команду.',id,max_tokens=3000)
+            default_prompt('launch_brief'),id,max_tokens=3000)
         with Session.begin() as session:
             query=select(Run).where(Run.id==rid)
             if session.bind.dialect.name=='postgresql':query=query.with_for_update()

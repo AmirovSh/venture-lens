@@ -33,20 +33,36 @@ def routes(role):
     return result
 
 def invoke(run_id,role,packet,schema,instruction,model_id=None,max_tokens=12000):
-    if not settings.BASE_URL or not settings.API_KEY:raise LLMError('LLM не настроен')
-    with Session() as session:limits=json.loads(session.get(Run,run_id).policy)['limits']
-    choices=routes(role);last_error='';dependency=None
+    from . import runtime_config
+    with Session() as session:policy=json.loads(session.get(Run,run_id).policy)
+    limits=policy['limits'];snapshot=policy.get('agent_config')
+    if snapshot:
+        config=runtime_config.connection(snapshot)
+        if config['connection_mode']=='custom':
+            choices=[{'model':snapshot['models'][role],'url':config['base_url'],'key':runtime_config.key_for(config),'transport':'','client_cert':None,'isolated_tls':True}]
+        else:
+            choices=routes(role);choices[0]['model']=snapshot['models'][role]
+        instruction=snapshot['prompts'][role]
+        _,live_config=runtime_config.current()
+        concurrency,rpm=live_config['concurrency'],live_config['requests_per_minute']
+    else:
+        choices=routes(role)
+        concurrency,rpm=int(settings.setting('LLM_MAX_CONCURRENCY','2')),int(settings.setting('LLM_REQUESTS_PER_MINUTE','30'))
+    if not choices[0]['url'] or not choices[0]['key']:raise LLMError('Сервер моделей не настроен')
+    if role=='verifier':instruction+='\nОбязательные условия: '+dump(policy['criteria'])
+    prompt_version=('runtime-'+str(snapshot['version'])+'-'+hashlib.sha256(instruction.encode()).hexdigest()[:12]) if snapshot else {'discovery':'5.0','screening':'5.0','critic':'4.1','launch_brief':'5.0'}.get(role,'3.0')
+    last_error='';dependency=None
     for attempt in range(limits['retries']+1):
         if current.get() and draining.is_set():raise DependencyUnavailable('Исполнитель завершает работу; этап продолжит другая реплика',2,False)
         route=choices[min(attempt,len(choices)-1)];name=providers.identity('llm',route['url']);invocation_id=None
         try:
-            with providers.lane(name,limits['request_timeout_seconds'],int(settings.setting('LLM_MAX_CONCURRENCY','2')),int(settings.setting('LLM_REQUESTS_PER_MINUTE','30'))):
+            with providers.lane(name,limits['request_timeout_seconds'],concurrency,rpm):
                 content=dump(packet);invocation_id=uid()
                 with Session.begin() as session:
                     assert_owner(session,run_id)
                     changed=session.execute(update(Run).where(Run.id==run_id,Run.calls<limits['max_llm_calls'],Run.tokens+max_tokens<=limits['max_total_tokens']).values(calls=Run.calls+1,tokens=Run.tokens+max_tokens))
                     if not changed.rowcount:raise BudgetExceeded('Достигнут лимит LLM-запросов или токенов')
-                    session.add(Invocation(id=invocation_id,run_id=run_id,model_id=model_id,role=role,model=route['model'],provider=name,prompt_version={'discovery':'4.0','screening':'4.1','critic':'4.1','launch_brief':'4.1'}.get(role,'3.0'),input_hash=hashlib.sha256(content.encode()).hexdigest(),input=content,tokens=max_tokens))
+                    session.add(Invocation(id=invocation_id,run_id=run_id,model_id=model_id,role=role,model=route['model'],provider=name,prompt_version=prompt_version,prompt_text=SYSTEM+'\n'+instruction,input_hash=hashlib.sha256(content.encode()).hexdigest(),input=content,tokens=max_tokens))
                 body=completion({'model':route['model'],'messages':[{'role':'system','content':SYSTEM+'\n'+instruction},{'role':'user','content':content}],'temperature':0,'max_tokens':max_tokens,'thinking':{'type':'disabled'},'reasoning_effort':'low' if 'deepseek' in route['model'] else 'none','chat_template_kwargs':{'enable_thinking':False},'response_format':{'type':'json_schema','json_schema':{'name':role,'strict':True,'schema':schema.model_json_schema()}}},limits['request_timeout_seconds'],route)
                 raw=body['choices'][0]['message']['content'];used=body.get('usage',{}).get('total_tokens')
                 with Session.begin() as session:
