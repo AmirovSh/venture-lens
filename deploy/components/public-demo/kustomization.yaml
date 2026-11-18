@@ -4,3 +4,9 @@ resources: [public.yaml]
 configMapGenerator:
 - name: venture-lens-public-edge
   files: [Caddyfile]
+- name: venture-lens-public-settings
+  literals:
+  - PUBLIC_ORIGIN=https://venture-lens.duckdns.org
+  - ALLOWED_ORIGINS=http://127.0.0.1:3210,http://localhost:3210,https://91.108.213.165,https://venture-lens.duckdns.org
+patches:
+- path: api-origin.yaml

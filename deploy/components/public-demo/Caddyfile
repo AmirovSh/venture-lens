@@ -19,6 +19,15 @@ https://91.108.213.165 {
 			profile shortlived
 		}
 	}
+	redir {$PUBLIC_ORIGIN}{uri} 308
+}
+
+{$PUBLIC_ORIGIN} {
+	tls {
+		issuer acme {
+			dir https://acme-v02.api.letsencrypt.org/directory
+		}
+	}
 	header {
 		Strict-Transport-Security "max-age=604800"
 		X-Content-Type-Options nosniff
@@ -38,6 +47,6 @@ https://91.108.213.165 {
 		lb_retry_match method GET HEAD OPTIONS
 		header_up X-Forwarded-For {remote_host}
 		header_up X-Forwarded-Proto https
-		header_up X-Forwarded-Host 91.108.213.165
+		header_up X-Forwarded-Host {host}
 	}
 }

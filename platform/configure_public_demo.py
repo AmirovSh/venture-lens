@@ -10,6 +10,7 @@ import shlex
 import sys
 from urllib.parse import urlsplit
 from ssh_client import ROOT, connect, execute
+from public_settings import public_origin
 
 sys.path.insert(0, str(ROOT))
 from backend.demo_auth import password_hash, password_matches
@@ -46,12 +47,14 @@ def main():
     credentials_path = ROOT / '.platform/public-demo-credentials.json'
     state_path = ROOT / '.platform/public-demo-secret.json'
     if args.rotate or not credentials_path.exists():
-        credentials = {'url': 'https://91.108.213.165',
+        credentials = {'url': public_origin(),
                        'owner': {'username': 'owner', 'password': secrets.token_urlsafe(18)},
                        'viewer': {'username': 'demo', 'password': secrets.token_urlsafe(18)}}
         credentials_path.write_text(json.dumps(credentials, ensure_ascii=False, indent=2) + '\n')
     else:
         credentials = json.loads(credentials_path.read_text())
+    credentials['url'] = public_origin()
+    credentials_path.write_text(json.dumps(credentials, ensure_ascii=False, indent=2) + '\n')
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
     previous = json.loads(state.get('DEMO_AUTH_USERS', '{}'))
     users = {}

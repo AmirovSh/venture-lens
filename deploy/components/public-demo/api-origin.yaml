@@ -1,0 +1,12 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: api}
+spec:
+  template:
+    spec:
+      containers:
+      - name: api
+        env:
+        - name: ALLOWED_ORIGINS
+          valueFrom:
+            configMapKeyRef: {name: venture-lens-public-settings, key: ALLOWED_ORIGINS}

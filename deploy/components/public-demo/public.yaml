@@ -32,7 +32,8 @@ spec:
           preStop: {exec: {command: [sh, -c, 'sleep 5']}}
         command: [uvicorn, backend.demo_auth:app, --host, 0.0.0.0, --port, '8090', --no-access-log, --no-proxy-headers]
         env:
-        - {name: PUBLIC_ORIGIN, value: 'https://91.108.213.165'}
+        - name: PUBLIC_ORIGIN
+          valueFrom: {configMapKeyRef: {name: venture-lens-public-settings, key: PUBLIC_ORIGIN}}
         - {name: PYTHONDONTWRITEBYTECODE, value: '1'}
         - name: DATABASE_URL
           valueFrom: {secretKeyRef: {name: venture-lens-demo-access, key: DATABASE_URL}}
@@ -72,6 +73,9 @@ spec:
       containers:
       - name: caddy
         image: caddy@sha256:003a97808e781aa9f7e75cc2f43d34d461099031faf5e20faefb9f61126836f0
+        env:
+        - name: PUBLIC_ORIGIN
+          valueFrom: {configMapKeyRef: {name: venture-lens-public-settings, key: PUBLIC_ORIGIN}}
         ports:
         - {name: http, containerPort: 80, hostPort: 80, protocol: TCP}
         - {name: https, containerPort: 443, hostPort: 443, protocol: TCP}
