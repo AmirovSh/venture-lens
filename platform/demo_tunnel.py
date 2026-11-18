@@ -1,10 +1,11 @@
-"""Explicit opt-in Windows demo tunnel. All server listeners stay on loopback."""
+"""Private UI SSH forwards; optional legacy workstation LLM forwarding."""
+import json
 import os
 import socket
 import threading
 import select
 import time
-from ssh_client import connect
+from ssh_client import connect, ROOT
 
 def pump(left,right):
     try:
@@ -38,9 +39,12 @@ def main():
         try:
             with connect() as client:
                 transport=client.get_transport();transport.set_keepalive(20)
-                transport.request_port_forward('127.0.0.1',18112,handler=lambda *args:threading.Thread(target=reverse,args=args,daemon=True).start())
+                config=json.loads((ROOT/'.platform/server.json').read_text())
+                legacy=config.get('llm_mode','workstation-tunnel')=='workstation-tunnel'
+                if legacy:
+                    transport.request_port_forward('127.0.0.1',18112,handler=lambda *args:threading.Thread(target=reverse,args=args,daemon=True).start())
                 for local,remote in [(3210,3210),(3090,3090)]:threading.Thread(target=local_forward,args=(client,local,remote),daemon=True).start()
-                print('DEMO_TUNNEL_CONNECTED: web 3210, Argo 3090; LLM forwarded privately',flush=True)
+                print('DEMO_TUNNEL_CONNECTED: web 3210, Argo 3090; '+('legacy LLM forward enabled' if legacy else 'LLM runs autonomously on VPS'),flush=True)
                 while transport.is_active():time.sleep(2)
         except Exception as error:print('DEMO_TUNNEL_RECONNECT: '+type(error).__name__,flush=True)
         time.sleep(5)

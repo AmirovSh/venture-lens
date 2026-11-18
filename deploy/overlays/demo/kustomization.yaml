@@ -35,7 +35,7 @@ images:
   newTag: demo-bootstrap
 - name: venture-lens-vpn-gateway
   newName: venture-lens-vpn-gateway
-  newTag: vpn-e8cfbeb64936bcaa
+  newTag: vpn-51526eaa9d61e86e
 replicas:
 - name: api
   count: 1

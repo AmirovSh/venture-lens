@@ -5,6 +5,7 @@ import os
 import socket
 import ssl
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit
@@ -13,6 +14,29 @@ from urllib.request import Request, build_opener, ProxyHandler, HTTPSHandler
 MAX_BODY = 500_000
 MAX_RESPONSE = 8_000_000
 SLOTS = threading.BoundedSemaphore(2)
+
+
+class UpstreamHealth:
+    def __init__(self, upstream, context):
+        self.target = urlsplit(upstream)
+        self.context = context
+        self.checked = 0
+        self.ready = False
+        self.lock = threading.Lock()
+
+    def __call__(self):
+        with self.lock:
+            if time.monotonic() - self.checked < 2:
+                return self.ready
+            try:
+                with socket.create_connection((self.target.hostname, self.target.port or 443), timeout=3) as raw:
+                    with self.context.wrap_socket(raw, server_hostname=self.target.hostname):
+                        pass
+                self.ready = True
+            except (OSError, ssl.SSLError):
+                self.ready = False
+            self.checked = time.monotonic()
+            return self.ready
 
 
 def tls_context():
@@ -39,13 +63,9 @@ class Gateway(BaseHTTPRequestHandler):
         if self.path == '/live':
             self.reply(200, {'status': 'alive'})
         elif self.path == '/ready':
-            target = urlsplit(self.server.upstream)
-            try:
-                with socket.create_connection((target.hostname, target.port or 443), timeout=3) as raw:
-                    with self.server.tls.wrap_socket(raw, server_hostname=target.hostname):
-                        pass
+            if self.server.upstream_ready():
                 self.reply(200, {'status': 'ready'})
-            except (OSError, ssl.SSLError):
+            else:
                 self.reply(503, {'status': 'waiting', 'code': 'CORPORATE_CONNECTION_UNAVAILABLE'}, 10)
         else:
             self.reply(404, {'error': 'not_found'})
@@ -72,6 +92,9 @@ class Gateway(BaseHTTPRequestHandler):
                 return
         except (ValueError, UnicodeError, TimeoutError):
             self.reply(400, {'error': 'invalid_request'})
+            return
+        if not self.server.upstream_ready():
+            self.reply(503, {'error': 'corporate_connection_unavailable'}, 10)
             return
         if not SLOTS.acquire(blocking=False):
             self.reply(429, {'error': 'adapter_busy'}, 3)
@@ -110,6 +133,7 @@ def make_server(address=('0.0.0.0', 8080)):
     context = tls_context()
     server = ThreadingHTTPServer(address, Gateway)
     server.upstream, server.token, server.api_key, server.tls = upstream, token, api_key, context
+    server.upstream_ready = UpstreamHealth(upstream, context)
     server.models = set(os.environ.get('LLM_ALLOWED_MODELS', 'qwen3.8-27b,deepseek-v4-flash').split(','))
     return server
 

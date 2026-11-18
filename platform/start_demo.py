@@ -1,5 +1,6 @@
 """Start the explicitly approved private VPS demo connection on Windows."""
 import socket
+import json
 import subprocess
 import time
 import urllib.request
@@ -17,7 +18,8 @@ def listening(port):
 def main():
     if not (STATE / 'server.json').is_file():
         raise SystemExit('Missing ignored .platform/server.json SSH configuration')
-    start_bridge()
+    mode=json.loads((STATE/'server.json').read_text()).get('llm_mode','workstation-tunnel')
+    if mode=='workstation-tunnel':start_bridge()
     if not listening(3210):
         process = subprocess.Popen(
             [str(ROOT / '.venv/Scripts/python.exe'), str(ROOT / 'platform/demo_tunnel.py')],
@@ -34,7 +36,10 @@ def main():
                 if response.status == 200:
                     print('Private demo: http://127.0.0.1:3210')
                     print('Argo CD: http://127.0.0.1:3090 (admin password: .platform/server-argocd-admin.txt)')
-                    print('Keep this computer and its existing SOCKS gateway on for the temporary LLM connection.')
+                    if mode=='workstation-tunnel':
+                        print('Keep this computer and its existing SOCKS gateway on for the temporary LLM connection.')
+                    else:
+                        print('LLM is autonomous on VPS through corporate VPN; this tunnel is only for private UI access.')
                     return
         except OSError:
             pass

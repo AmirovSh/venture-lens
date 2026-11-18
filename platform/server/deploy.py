@@ -35,7 +35,10 @@ def main():
     apply({'apiVersion':'v1','kind':'Namespace','metadata':{'name':NS}})
     values=json.loads((ROOT/'runtime.json').read_text())
     apply({'apiVersion':'v1','kind':'Secret','metadata':{'name':'venture-lens-runtime','namespace':NS},'type':'Opaque','stringData':values})
-    service('venture-lens-llm-relay',f'/usr/bin/python3 {ROOT}/loopback_proxy.py','Private temporary demo LLM relay','nobody')
+    if values['LLM_BASE_URL'].startswith('http://corporate-llm:8080/'):
+        subprocess.run(['systemctl','disable','--now','venture-lens-llm-relay'],check=False)
+    else:
+        service('venture-lens-llm-relay',f'/usr/bin/python3 {ROOT}/loopback_proxy.py','Private temporary demo LLM relay','nobody')
     kube('apply','-k',str(ROOT/'source/deploy/overlays/demo'))
     for name in ['postgres','source-store']:kube('-n',NS,'rollout','status','statefulset/'+name,'--timeout=240s')
     kube('-n',NS,'wait','--for=condition=complete','job/bucket-init','--timeout=240s')

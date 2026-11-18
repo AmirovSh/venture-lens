@@ -35,6 +35,7 @@ def adapter(upstream):
     server.api_key = 'corporate-token'
     server.models = {'allowed-model'}
     server.tls = ssl.create_default_context()
+    server.upstream_ready = lambda: True
     return server
 
 
@@ -103,6 +104,15 @@ def test_gateway_connection_failure_releases_concurrency_slot():
         for _ in range(3):
             status, headers, result = request(url, b'{"model":"allowed-model"}')
             assert status == 503 and headers['Retry-After'] == '10'
+
+
+def test_gateway_vpn_outage_fails_fast_without_forwarding():
+    server = adapter('http://127.0.0.1:1')
+    server.upstream_ready = lambda: False
+    with serve(server) as url:
+        status, headers, result = request(url, b'{"model":"allowed-model"}')
+    assert status == 503 and headers['Retry-After'] == '10'
+    assert result == {'error': 'corporate_connection_unavailable'}
 
 
 def test_gateway_configuration_rejects_plain_http(monkeypatch):
