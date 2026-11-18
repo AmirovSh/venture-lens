@@ -56,6 +56,7 @@ jobs:
       - run: python platform/lab.py deploy
       - run: python platform/fault_tests.py
       - run: docker build -f Dockerfile.backup -t venture-lens-backup:lab-v1 .
+      - run: docker build -f platform/server/Dockerfile.vpn-gateway -t venture-lens-vpn-gateway:ci platform/server
       - run: python platform/backup_test.py
       - run: python platform/scaling_test.py
       - name: Commit only the ephemeral lab image references
@@ -70,7 +71,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           tag=$(python -c "import json; print(json.load(open('.platform/release.json'))['tag'])")
-          docker save -o release.tar "venture-lens-api:$tag" "venture-lens-web:$tag" venture-lens-backup:lab-v1
+          docker save -o release.tar "venture-lens-api:$tag" "venture-lens-web:$tag" venture-lens-backup:lab-v1 venture-lens-vpn-gateway:ci
           cp .platform/release.json release.json
           sha256sum release.tar > release.tar.sha256
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -113,9 +114,10 @@ jobs:
           docker load -i release.tar
           tag=$(python3 -c "import json; print(json.load(open('release.json'))['tag'])")
           owner="${OWNER,,}"
-          for service in api web backup; do
+          for service in api web backup vpn-gateway; do
             source_tag="$tag"
             if [ "$service" = backup ]; then source_tag=lab-v1; fi
+            if [ "$service" = vpn-gateway ]; then source_tag=ci; fi
             docker tag "venture-lens-$service:$source_tag" "ghcr.io/$owner/venture-lens-$service:$RELEASE_SHA"
             docker push "ghcr.io/$owner/venture-lens-$service:$RELEASE_SHA"
             docker inspect --format '{{index .RepoDigests 0}}' "ghcr.io/$owner/venture-lens-$service:$RELEASE_SHA" >> release-digests.txt

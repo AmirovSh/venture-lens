@@ -1,0 +1,107 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: corporate-llm
+spec:
+  selector: {app: corporate-llm}
+  ports: [{port: 8080, targetPort: 8080}]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: corporate-llm
+spec:
+  replicas: 1
+  # The personal VPN identity must not be connected by two replicas at once.
+  strategy: {type: Recreate}
+  selector: {matchLabels: {app: corporate-llm}}
+  template:
+    metadata:
+      labels: {app: corporate-llm}
+    spec:
+      automountServiceAccountToken: false
+      terminationGracePeriodSeconds: 30
+      securityContext: {fsGroup: 10001}
+      containers:
+      - name: vpn
+        image: venture-lens-vpn-gateway:dev
+        command: [openvpn]
+        args:
+        - --config
+        - /run/vpn/profile.ovpn
+        - --dev
+        - tun0
+        - --auth-nocache
+        - --route-nopull
+        - --route
+        - models.example.com
+        - '255.255.255.255'
+        - vpn_gateway
+        securityContext:
+          runAsUser: 0
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: [ALL], add: [NET_ADMIN]}
+        resources: {requests: {cpu: 25m, memory: 32Mi}, limits: {cpu: '1', memory: 128Mi}}
+        readinessProbe:
+          exec: {command: [sh, -c, 'ip link show tun0 >/dev/null']}
+          periodSeconds: 5
+        volumeMounts:
+        - {name: vpn, mountPath: /run/vpn, readOnly: true}
+        - {name: tun, mountPath: /dev/net/tun}
+        - {name: tmp-vpn, mountPath: /tmp}
+      - name: adapter
+        image: venture-lens-vpn-gateway:dev
+        ports: [{containerPort: 8080}]
+        envFrom: [{secretRef: {name: venture-lens-corporate-access}}]
+        env:
+        - name: GATEWAY_TOKEN
+          valueFrom: {secretKeyRef: {name: venture-lens-runtime, key: LLM_API_KEY}}
+        securityContext:
+          runAsUser: 10001
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities: {drop: [ALL]}
+        resources: {requests: {cpu: 25m, memory: 48Mi}, limits: {cpu: '1', memory: 192Mi}}
+        startupProbe: {httpGet: {path: /live, port: 8080}, periodSeconds: 2, failureThreshold: 30}
+        livenessProbe: {httpGet: {path: /live, port: 8080}, periodSeconds: 10}
+        readinessProbe: {httpGet: {path: /ready, port: 8080}, periodSeconds: 10, timeoutSeconds: 5}
+        volumeMounts:
+        - {name: tls, mountPath: /run/tls, readOnly: true}
+        - {name: tmp-adapter, mountPath: /tmp}
+      volumes:
+      - name: vpn
+        secret:
+          secretName: venture-lens-vpn
+          defaultMode: 256
+          items: [{key: profile.ovpn, path: profile.ovpn}, {key: passphrase.txt, path: passphrase.txt}]
+      - name: tls
+        secret:
+          secretName: venture-lens-vpn
+          defaultMode: 288
+          items: [{key: client.pem, path: client.pem}, {key: client.key, path: client.key}, {key: corporate-ca.pem, path: corporate-ca.pem}]
+      - name: tun
+        hostPath: {path: /dev/net/tun, type: CharDevice}
+      - {name: tmp-vpn, emptyDir: {sizeLimit: 16Mi}}
+      - {name: tmp-adapter, emptyDir: {sizeLimit: 16Mi}}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: corporate-llm
+spec:
+  podSelector: {matchLabels: {app: corporate-llm}}
+  policyTypes: [Ingress, Egress]
+  ingress:
+  - from:
+    - podSelector:
+        matchExpressions: [{key: app, operator: In, values: [api, worker]}]
+    ports: [{protocol: TCP, port: 8080}]
+  egress:
+  - to:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: kube-system}}
+      podSelector: {matchLabels: {k8s-app: kube-dns}}
+    ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
+  # Only the VPN transport leaves the pod. Direct HTTPS fallback is blocked.
+  - ports: [{protocol: UDP, port: 1198}]
