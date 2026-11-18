@@ -46,7 +46,9 @@ def private_permissions(path):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--rotate', action='store_true', help='Generate new owner and viewer passwords; then restart demo-access')
+    rotation = parser.add_mutually_exclusive_group()
+    rotation.add_argument('--rotate', action='store_true', help='Generate new owner and viewer passwords; then restart demo-access')
+    rotation.add_argument('--rotate-owner', action='store_true', help='Operator recovery: rotate only the owner bootstrap password, then restart demo-access')
     args = parser.parse_args()
     credentials_path = ROOT / '.platform/public-demo-credentials.json'
     state_path = ROOT / '.platform/public-demo-secret.json'
@@ -57,6 +59,8 @@ def main():
         credentials_path.write_text(json.dumps(credentials, ensure_ascii=False, indent=2) + '\n')
     else:
         credentials = json.loads(credentials_path.read_text())
+        if args.rotate_owner:
+            credentials['owner']['password'] = secrets.token_urlsafe(18)
     credentials['url'] = public_origin()
     credentials_path.write_text(json.dumps(credentials, ensure_ascii=False, indent=2) + '\n')
     state = json.loads(state_path.read_text()) if state_path.exists() else {}
