@@ -28,11 +28,11 @@ configMapGenerator:
   - S3_PROVISION_BUCKET=true
 images:
 - name: venture-lens-api
-  newName: venture-lens-api
-  newTag: fix-revision-omitted
+  newName: ghcr.io/amirovsh/venture-lens-api
+  digest: sha256:83fb5b90734c1ad9153ca3d4f56028388005b1b9fb4f4b999df2b526a9ddecd0
 - name: venture-lens-web
-  newName: venture-lens-web
-  newTag: fix-revision-omitted
+  newName: ghcr.io/amirovsh/venture-lens-web
+  digest: sha256:5308d872e53bb57f5d900e371578683e43f345c620fbebcf41037ee282b61bd4
 - name: venture-lens-vpn-gateway
   newName: venture-lens-vpn-gateway
   newTag: vpn-51526eaa9d61e86e
