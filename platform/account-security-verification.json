@@ -1,10 +1,7 @@
 {
   "verified_at": "2026-11-18T11:29:24.166244+00:00",
   "scope": "password changes and administrator-assisted recovery on public VPS",
-  "release": {
-    "api": "venture-lens-api:security-revision-omitted",
-    "web": "venture-lens-web:security-revision-omitted"
-  },
+  "release": {},
   "postgresql_tests": {
     "passed": 68,
     "skipped": 0,

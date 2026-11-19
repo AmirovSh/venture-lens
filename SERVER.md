@@ -4,6 +4,8 @@
 
 Текущий релиз и результат GitHub Actions описаны в [DELIVERY.md](DELIVERY.md). Argo CD синхронизирует `deploy/overlays/demo` из `master`. Для обновления приложения в Git закрепляются digest проверенных образов, затем проверяются готовность Kubernetes, статус `Synced / Healthy` и сценарии на публичном сайте.
 
+Интерфейс [Argo CD](https://argocd.venture-lens.duckdns.org) открыт по HTTPS. Для входа используются учётные записи Argo CD и их права. Реквизиты выдаёт оператор отдельно.
+
 ## Компоненты демонстрации
 
 | Компонент | Конфигурация |
@@ -17,7 +19,7 @@
 | Публичный HTTPS | Caddy, постоянное хранилище TLS |
 | Управление инфраструктурой | K3s, Argo CD и KEDA |
 
-API и worker получают системный адрес `LLM_BASE_URL` и реквизиты подключения из внешнего Kubernetes Secret `venture-lens-runtime`. Оператор задаёт Secret до синхронизации и обновляет pod после изменения значений среды. Администратор может отдельно проверить сервер моделей и настроить модели и промпты по ролям. Подробности в [PRODUCT_CONTROLS.md](PRODUCT_CONTROLS.md) и [CONNECTION_ROTATION.md](CONNECTION_ROTATION.md).
+API и worker получают системный адрес `LLM_BASE_URL` и реквизиты подключения из внешнего Kubernetes Secret `venture-lens-runtime`. Модель по умолчанию в ConfigMap — `deepseek-v4-flash`. После применения изменений ConfigMap или Secret нужно обновить pod API и worker, дождаться их готовности и проверить модель через `/api/health` и тест подключения. Статус `Synced` подтверждает синхронизацию манифестов. Запущенные процессы считывают переменные среды при старте. Подробности в [PRODUCT_CONTROLS.md](PRODUCT_CONTROLS.md) и [CONNECTION_ROTATION.md](CONNECTION_ROTATION.md).
 
 Проверки готовности и контроллеры Kubernetes восстанавливают контейнеры. Worker использует lease и fencing, а API и worker делят лимиты в PostgreSQL. Argo CD восстанавливает конфигурацию из Git. Отказ одного VPS остановит все размещённые на нём компоненты. Реплики на одном узле не обеспечивают доступность при потере хоста.
 

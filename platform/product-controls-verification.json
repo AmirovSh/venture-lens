@@ -59,12 +59,7 @@
       "new_research"
     ]
   },
-  "backend_source_revision": "revision-omitted",
-  "frontend_source_revision": "revision-omitted",
-  "images": {
-    "api": "venture-lens-api:product-revision-omitted",
-    "web": "venture-lens-web:product-revision-omitted"
-  },
+  "images": {},
   "automated_checks": {
     "postgresql": {
       "passed": 106,

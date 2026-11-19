@@ -11,7 +11,6 @@
       "repoURL": "https://github.com/AmirovSh/venture-lens.git",
       "targetRevision": "master"
     },
-    "revision": "revision-omitted",
     "sync": "Synced",
     "health": "Healthy",
     "legacy_git_mirror": "disabled",
@@ -21,10 +20,7 @@
     },
     "web_build_inputs_match_deployed_source": true,
     "ready_pods": 9,
-    "images": [
-      "venture-lens-api:fix-revision-omitted",
-      "venture-lens-web:fix-revision-omitted"
-    ],
+    "images": [],
     "automatic_followup_commit_observed": true
   },
   "site": {
@@ -136,8 +132,6 @@
   ],
   "ci": {
     "status": "completed",
-    "source_revision": "revision-omitted",
-    "url": "https://github.com/AmirovSh/venture-lens/actions",
     "postgres_tests": {
       "passed": 123,
       "skipped": 0,

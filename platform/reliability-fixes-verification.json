@@ -1,9 +1,5 @@
 {
-  "source_revision": "revision-omitted",
-  "images": {
-    "api": "venture-lens-api:fix-revision-omitted",
-    "web": "venture-lens-web:fix-revision-omitted"
-  },
+  "images": {},
   "before": {
     "before": {
       "schema": "0006_product_controls",
@@ -34,7 +30,6 @@
     },
     "existing_records_preserved": true,
     "gitops": {
-      "revision": "revision-omitted",
       "sync": "Synced",
       "health": "Healthy"
     },

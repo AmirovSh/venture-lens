@@ -1,9 +1,6 @@
 {
   "verified_at": "2026-11-18T20:07:38.000798+00:00",
   "url": "https://venture-lens.duckdns.org",
-  "web_image": "venture-lens-web:ux-revision-omitted",
-  "api_worker_image_unchanged": "venture-lens-api:decision-revision-omitted",
-  "code_commit": "revision-omitted",
   "checks": {
     "typescript": "passed",
     "next_production_build": "passed",
@@ -61,7 +58,6 @@
   },
   "deployment_observed": {
     "argocd": "Synced / Healthy",
-    "revision_before_documentation": "revision-omitted",
     "service_pods_ready": 9,
     "restarts": 0
   },

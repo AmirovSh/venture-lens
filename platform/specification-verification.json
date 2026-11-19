@@ -202,9 +202,6 @@
   "deployment": {
     "argocd_sync": "Synced",
     "argocd_health": "Healthy",
-    "observed_revision": "revision-omitted",
-    "api_worker_auth_image": "venture-lens-api:spec-revision-omitted",
-    "web_image": "venture-lens-web:spec-revision-omitted",
     "data_preserved_after_rollout": true,
     "latest_server_only_snapshot": "/opt/venture-lens/backups/20261118T124948Z",
     "snapshot_files": 2,

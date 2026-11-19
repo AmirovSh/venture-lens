@@ -4,6 +4,8 @@ resources: [public.yaml]
 configMapGenerator:
 - name: venture-lens-public-edge
   files: [Caddyfile]
+  literals:
+  - ARGOCD_ORIGIN=https://argocd.venture-lens.duckdns.org
 - name: venture-lens-public-settings
   literals:
   - PUBLIC_ORIGIN=https://venture-lens.duckdns.org

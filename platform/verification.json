@@ -83,8 +83,7 @@
       "passed": true,
       "sync": "Synced",
       "health": "Healthy",
-      "self_heal": "manual Deployment drift restored from Git",
-      "revision": "revision-omitted"
+      "self_heal": "manual Deployment drift restored from Git"
     }
   },
   "additional": {

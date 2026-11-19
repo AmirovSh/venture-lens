@@ -88,8 +88,6 @@
   "fix": {
     "problem": "Completing a pilot without a result displayed a generic field error omitting the result field.",
     "change": "Required result textarea, Russian hint, whitespace validation, preservation of meaningful server validation messages.",
-    "code_commit": "revision-omitted",
-    "web_image": "venture-lens-web:journey-revision-omitted",
     "typescript": "passed",
     "next_production_build": "passed",
     "browser_retest": "passed"

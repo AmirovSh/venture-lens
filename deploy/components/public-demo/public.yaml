@@ -82,6 +82,8 @@ spec:
         env:
         - name: PUBLIC_ORIGIN
           valueFrom: {configMapKeyRef: {name: venture-lens-public-settings, key: PUBLIC_ORIGIN}}
+        - name: ARGOCD_ORIGIN
+          valueFrom: {configMapKeyRef: {name: venture-lens-public-edge, key: ARGOCD_ORIGIN}}
         ports:
         - {name: http, containerPort: 80, hostPort: 80, protocol: TCP}
         - {name: https, containerPort: 443, hostPort: 443, protocol: TCP}
@@ -140,6 +142,10 @@ spec:
     ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
   - to: [{podSelector: {matchLabels: {app: demo-access}}}]
     ports: [{protocol: TCP, port: 8090}]
+  - to:
+    - namespaceSelector: {matchLabels: {kubernetes.io/metadata.name: argocd}}
+      podSelector: {matchLabels: {app.kubernetes.io/name: argocd-server}}
+    ports: [{protocol: TCP, port: 8080}]
   - to:
     - ipBlock: {cidr: 0.0.0.0/0, except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 127.0.0.0/8, 169.254.0.0/16]}
     ports: [{protocol: TCP, port: 443}]

@@ -1,10 +1,7 @@
 {
   "verified_at": "2026-11-18T18:28:43.151050+00:00",
   "scope": "Owner decision workspace and onboarding, local implementation and live single-node VPS deployment",
-  "images": {
-    "api_worker_auth": "venture-lens-api:decision-revision-omitted",
-    "web": "venture-lens-web:decision-revision-omitted"
-  },
+  "images": {},
   "checks": {
     "postgresql_suite": {
       "passed": 96,
@@ -328,7 +325,6 @@
   "deployment_observed": {
     "sync": "Synced",
     "health": "Healthy",
-    "source_revision_before_documentation_commit": "revision-omitted",
     "all_service_pods_ready": true,
     "service_pod_restarts": 0,
     "openvpn_active": false,
