@@ -5,7 +5,7 @@ metadata:
   annotations: {argocd.argoproj.io/sync-wave: "-3"}
 data:
   DATA_DIR: /tmp/venture-lens
-  LLM_MODEL: qwen3.8-27b
+  LLM_MODEL: deepseek-v4-flash
   LLM_CRITIC_MODEL: deepseek-v4-flash
   LLM_SCREENING_MODEL: deepseek-v4-flash
   LLM_FALLBACK_MODEL: deepseek-v4-flash
