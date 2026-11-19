@@ -6,6 +6,8 @@ resources:
 components:
 - ../../components/autoscaling
 - ../../components/backup
+patches:
+- path: api-auth.yaml
 configMapGenerator:
 - name: venture-lens-config
   behavior: merge

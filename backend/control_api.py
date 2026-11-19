@@ -133,5 +133,13 @@ def add_source_links(id:str,body:SourceLinksInput,request:Request):
                 links.append({'url':url,'model_id':body.model_id,'added':time.time()});added+=1
         if len(links)>50:raise HTTPException(422,'Для исследования уже сохранено максимально допустимое число ссылок')
         config['manual_sources']=links;run.settings=db.dump(config);run.updated=time.time()
-        s.add(db.Event(run_id=id,model_id=body.model_id,stage='source_links',message='Добавлены ссылки пользователя. Используйте повторный отбор, чтобы проверить материалы.',payload=db.dump({'urls':body.urls,'added':added})))
-    return {'status':'saved','added':added,'notice':'Ссылки сохранены. Они будут загружены и проверены при повторном отборе; допуск пока не изменён.'}
+        has_cards=body.model_id is not None or s.scalar(select(db.Model.id).where(db.Model.run_id==id).limit(1)) is not None
+        if has_cards:
+            advice='Используйте повторный отбор карточки, чтобы проверить материалы.'
+        elif run.status in ('partial','cancelled'):
+            advice='Нажмите «Продолжить» в обзоре, чтобы учесть материалы в первичном поиске.'
+        else:
+            advice='Материалы будут учтены при следующем проходе первичного поиска.'
+        notice='Ссылки сохранены. '+advice
+        s.add(db.Event(run_id=id,model_id=body.model_id,stage='source_links',message=notice,payload=db.dump({'urls':body.urls,'added':added})))
+    return {'status':'saved','added':added,'notice':notice}

@@ -53,6 +53,36 @@ def test_exhausted_job_moves_to_terminal_failure(store):
         assert s.get(db.Job,'job').status=='failed'
         assert s.get(db.Run,'run').status=='partial'
 
+def test_failed_finalization_rolls_back_job_and_replacement_finishes_run(store,monkeypatch):
+    seed(store)
+    monkeypatch.setattr(worker,'process_model',lambda model_id:None)
+    original=worker.finish_run
+    def interrupted(session,run):
+        original(session,run)
+        raise RuntimeError('synthetic finalization interruption')
+    claim=worker.claim_job('first')
+    with monkeypatch.context() as overrides:
+        overrides.setattr(worker,'finish_run',interrupted)
+        with pytest.raises(RuntimeError,match='finalization interruption'):
+            worker.execute(claim)
+    with store.begin() as s:
+        job=s.get(db.Job,'job')
+        assert job.status=='running' and job.lease_owner==claim.owner
+        assert s.get(db.Run,'run').status=='running'
+        job.lease_until=time.time()-1
+    replacement=worker.claim_job('replacement')
+    assert replacement.epoch>claim.epoch
+    worker.execute(replacement)
+    with store() as s:
+        assert s.get(db.Job,'job').status=='completed'
+        assert s.get(db.Run,'run').status=='completed'
+
+def test_idle_worker_reconciles_run_left_active_with_terminal_jobs(store):
+    seed(store)
+    with store.begin() as s:s.get(db.Job,'job').status='completed'
+    assert worker.claim_job('replacement') is None
+    with store() as s:assert s.get(db.Run,'run').status=='completed'
+
 def test_dependency_wait_is_scheduled_without_losing_artifact(store,monkeypatch):
     seed(store);claim=worker.claim_job('worker')
     def pause(_):

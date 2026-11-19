@@ -38,7 +38,11 @@ jobs:
           .tools/kubectl kustomize deploy/overlays/local > /tmp/local.yaml
           .tools/kubectl kustomize deploy/overlays/demo > /tmp/demo.yaml
           .tools/kubectl kustomize deploy/overlays/production > /tmp/production.yaml
-          if ! grep -q REPLACE_ /tmp/production.yaml; then python platform/preflight.py /tmp/production.yaml; fi
+          if grep -q REPLACE_ /tmp/production.yaml; then
+            python platform/preflight.py --template /tmp/production.yaml
+          else
+            python platform/preflight.py /tmp/production.yaml
+          fi
   recovery:
     needs: checks
     runs-on: ubuntu-24.04

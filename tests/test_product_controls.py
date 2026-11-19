@@ -71,6 +71,38 @@ def test_discovery_retry_does_not_repay_completed_round(store,monkeypatch):
         assert s.query(db.Model).filter_by(run_id='discovery').count()==2
         assert db.read(s.get(db.Run,'discovery').settings)['selection']['stop_reason']=='no_new_hypotheses'
 
+def test_discovery_retry_uses_library_link_added_after_empty_result(store,monkeypatch):
+    discovery_run(store)
+    with store.begin() as s:
+        run=s.get(db.Run,'discovery');config=db.read(run.settings);config.update(sampling='quick',count=4)
+        run.settings=db.dump(config)
+        s.add(db.Job(run_id=run.id,key='discovery:'+run.id))
+    url='https://example.com/added-after-search'
+    packets=[];fetched=[]
+    def invoke(run_id,role,packet,*args,**kwargs):
+        packets.append(packet)
+        if len(packets)==1:return {'candidates':[],'coverage_summary':'Needs more evidence'}
+        return {'candidates':[{**candidate('Publisher','publisher'),'discovery_source_id':'manual'}]}
+    def fetch(address):
+        fetched.append(address)
+        return {**source('manual'),'url':address}
+    from backend import evidence,worker
+    monkeypatch.setattr(evidence,'public_url',lambda address:address)
+    monkeypatch.setattr(pipeline,'fetch',fetch)
+    monkeypatch.setattr(pipeline,'invoke',invoke)
+    worker.execute(worker.claim_job('first'))
+    with store() as s:assert s.get(db.Run,'discovery').status=='partial'
+    client=TestClient(app)
+    result=client.post('/api/runs/discovery/source-links',json={'urls':[url]})
+    assert result.status_code==201 and 'Продолжить' in result.json()['notice']
+    assert client.post('/api/runs/discovery/retry').status_code==200
+    worker.execute(worker.claim_job('second'))
+    assert fetched==[url]
+    assert url in {item['url'] for item in packets[1]['sources']}
+    with store() as s:
+        model=s.scalar(select(db.Model).where(db.Model.run_id=='discovery'))
+        assert db.read(model.data)['discovery_source']['url']==url
+
 def test_admin_settings_are_role_scoped_and_keys_never_echo(registered,monkeypatch):
     client,_,_,_=registered
     assert register(client).status_code==303

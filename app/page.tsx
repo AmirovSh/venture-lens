@@ -1,6 +1,6 @@
 'use client';
 
-import {useEffect,useState,useCallback} from 'react';
+import {useEffect,useState,useCallback,useRef} from 'react';
 import {ArrowUpRight,ArrowDown,ArrowUp,ArrowRight,Plus,Search,SlidersHorizontal,Layers,Activity,BookOpen,Settings2,ChevronDown,ChevronRight,Check,CheckCheck,CheckCircle2,Clock3,TriangleAlert,X,ExternalLink,Download,Square,RotateCw,LoaderCircle,ScanLine,ShieldCheck,GitBranch,Target,Coins,Users,Sparkles,Command,Scale,FileText,Bookmark,PanelLeftClose,LogOut,HelpCircle} from 'lucide-react';
 import Modal from './modal';
 import {AccountSettings,AdminConsole} from './account-settings';
@@ -24,18 +24,22 @@ const confidenceLabels:Record<string,string>={high:'Высокая',medium:'Ср
 const date=(n:number)=>new Date(n*1000).toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
 const time=(n:number)=>new Date(n*1000).toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
 const safeUrl=(url:string)=>/^https?:\/\//i.test(url)?url:'#';
-async function api(path:string,options?:RequestInit){const response=await fetch('/api'+path,{...options,headers:{'Content-Type':'application/json',...options?.headers}});if(response.status===401&&typeof window!=='undefined'){window.location.assign('/auth/login');throw new Error('Сессия завершена');}if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(typeof body.detail==='string'?body.detail:'Запрос не выполнен. Попробуйте ещё раз.');}return response.json();}
+async function api(path:string,options?:RequestInit){const response=await fetch('/api'+path,{...options,headers:{'Content-Type':'application/json',...options?.headers}});if(response.status===401&&!options?.signal?.aborted&&typeof window!=='undefined'){window.location.assign('/auth/login');throw new Error('Сессия завершена');}if(!response.ok){const body=await response.json().catch(()=>({}));throw new Error(typeof body.detail==='string'?body.detail:'Запрос не выполнен. Попробуйте ещё раз.');}return response.json();}
 function Badge({status}:{status:string}){return <span className={'badge '+status}><span className="status-dot"/>{statusLabels[status]||checkLabels[status]||status}</span>}
 function Mark({name,large=false}:{name:string;large?:boolean}){return <span className={'company-mark '+(large?'large ':'')+'tone-'+(name.charCodeAt(0)%5)}>{name.slice(0,1).toUpperCase()}</span>}
 
 export default function Page(){
- const[runs,setRuns]=useState<Run[]>([]),[run,setRun]=useState<Run|null>(null),[runId,setRunId]=useState(''),[health,setHealth]=useState<Json|null>(null),[view,setView]=useState('overview'),[filter,setFilter]=useState('all'),[query,setQuery]=useState(''),[descending,setDescending]=useState(false),[selected,setSelected]=useState<string[]>([]),[card,setCard]=useState<string|null>(null),[newModal,setNewModal]=useState(false),[compare,setCompare]=useState(false),[error,setError]=useState(''),[toast,setToast]=useState(''),[loading,setLoading]=useState(true),[audit,setAudit]=useState<Json[]|null>(null),[busy,setBusy]=useState(false),[sidebar,setSidebar]=useState(false);
+ const[runs,setRuns]=useState<Run[]>([]),[loadedRun,setLoadedRun]=useState<Run|null>(null),[runId,setRunId]=useState(''),[health,setHealth]=useState<Json|null>(null),[view,setView]=useState('overview'),[filter,setFilter]=useState('all'),[query,setQuery]=useState(''),[descending,setDescending]=useState(false),[selected,setSelected]=useState<string[]>([]),[card,setCard]=useState<string|null>(null),[newModal,setNewModal]=useState(false),[compare,setCompare]=useState(false),[error,setError]=useState(''),[toast,setToast]=useState(''),[loading,setLoading]=useState(true),[auditResult,setAuditResult]=useState<{runId:string;records:Json[]}|null>(null),[busy,setBusy]=useState(false),[sidebar,setSidebar]=useState(false);
  const[identity,setIdentity]=useState<{name:string;role:string;username:string}|null>(null);
  const[account,setAccount]=useState<Json|null>(null);
  const readOnly=identity?.role==='viewer';
  const member=identity?.role==='member'||identity?.role==='admin';
  const[helpOpen,setHelpOpen]=useState(false);
  const[exporting,setExporting]=useState(false);
+ const selectedRunId=useRef('');
+ const pendingRefresh=useRef<AbortController|null>(null);
+ const run=loadedRun?.id===runId?loadedRun:null;
+ const audit=auditResult?.runId===runId?auditResult.records:null;
  const pollingActive=!!run&&['queued','running','waiting'].includes(run.status);
  const eventLog=useEventLog(run?.id||'',pollingActive),events=eventLog.events;
  const openHelp=useCallback(()=>setHelpOpen(true),[]),closeHelp=useCallback(()=>setHelpOpen(false),[]);
@@ -47,10 +51,42 @@ export default function Page(){
  const cannotCreate=readOnly||!!(member&&account?.limits&&(account.limits.running>0||account.limits.remaining===0));
  const createHint=readOnly?'Гостевой доступ: только просмотр':member&&account?.limits?.running>0?'Дождитесь завершения текущего исследования':member&&account?.limits?.remaining===0?'Доступно до трёх новых исследований за 24 часа':undefined;
  useEffect(()=>{fetch('/auth/session').then(async response=>{if(response.ok)setIdentity(await response.json());}).catch(()=>{});},[]);
- const refresh=useCallback(async(id?:string)=>{try{const [list,accountInfo]=await Promise.all([api('/runs'),api('/account')]);setAccount(accountInfo);setRuns(list);const target=id||runId||list[0]?.id;if(target){const detail=await api('/runs/'+target);setRun(detail);if(!runId)setRunId(target);}setError('');}catch(e){setError((e as Error).message);}finally{setLoading(false);}},[runId]);
+ const refresh=useCallback(async()=>{
+  pendingRefresh.current?.abort();
+  const request=new AbortController();
+  pendingRefresh.current=request;
+  const options={signal:request.signal};
+  try{
+   const [list,accountInfo]=await Promise.all([api('/runs',options),api('/account',options)]);
+   if(request.signal.aborted)return;
+   setAccount(accountInfo);setRuns(list);
+   const target=selectedRunId.current||list[0]?.id;
+   if(target){
+    if(!selectedRunId.current){selectedRunId.current=target;setRunId(target);}
+    const detail=await api('/runs/'+target,options);
+    if(request.signal.aborted||selectedRunId.current!==target)return;
+    setLoadedRun(detail);
+   }
+   setError('');
+  }catch(e){if(!request.signal.aborted)setError((e as Error).message);}
+  finally{
+   if(pendingRefresh.current===request){pendingRefresh.current=null;setLoading(false);}
+  }
+ },[]);
+ const selectResearch=useCallback((id:string)=>{
+  if(selectedRunId.current===id)return;
+  selectedRunId.current=id;setRunId(id);setLoading(true);setLoadedRun(null);setError('');
+  setSelected([]);setCard(null);setCompare(false);setAuditResult(null);setFilter('all');
+  void refresh();
+ },[refresh]);
+ useEffect(()=>{void refresh();return()=>{const request=pendingRefresh.current;pendingRefresh.current=null;request?.abort();};},[refresh]);
  useEffect(()=>{api('/health').then(setHealth).catch(()=>setError('Сервис пока недоступен. Проверьте запуск API.'));},[]);
- useEffect(()=>{refresh();const visible=()=>{if(document.visibilityState==='visible')refresh();};const timer=setInterval(visible,pollingActive?3000:15000);document.addEventListener('visibilitychange',visible);return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',visible);};},[refresh,pollingActive]);
- useEffect(()=>{setSelected([]);setCard(null);setAudit(null);setFilter('all');},[runId]);
+ useEffect(()=>{
+  const poll=()=>{if(document.visibilityState==='visible'&&!pendingRefresh.current)void refresh();};
+  const timer=setInterval(poll,pollingActive?3000:15000);
+  document.addEventListener('visibilitychange',poll);
+  return()=>{clearInterval(timer);document.removeEventListener('visibilitychange',poll);};
+ },[refresh,pollingActive]);
  useEffect(()=>{if(!toast)return;const timer=setTimeout(()=>setToast(''),4000);return()=>clearTimeout(timer);},[toast]);
  const closeNew=useCallback(()=>setNewModal(false),[]),closeCard=useCallback(()=>setCard(null),[]),closeCompare=useCallback(()=>setCompare(false),[]);
  const active=run?.status==='running'||run?.status==='queued'||run?.status==='waiting';
@@ -69,7 +105,7 @@ export default function Page(){
    <nav aria-label="Основная навигация">{[{id:'overview',icon:Layers,title:'Обзор моделей',count:models.length},{id:'sources',icon:BookOpen,title:'База источников',count:sources.length},{id:'agents',icon:GitBranch,title:'Выводы агентов',count:models.length},{id:'activity',icon:Activity,title:'Журнал исследования',count:eventLog.total}].map(n=><button key={n.id} className={'nav-item '+(view===n.id?'active':'')} onClick={()=>{setView(n.id);setSidebar(false);}}><n.icon size={18}/><span>{n.title}</span>{n.count>0&&<small>{n.count}</small>}</button>)}</nav>
    <div className="sidebar-divider"/>
    <div className="nav-caption caption-row">ВАШИ ИССЛЕДОВАНИЯ<button className="icon-button" aria-label="Новое исследование" disabled={cannotCreate} title={createHint} onClick={()=>startResearch()}><Plus size={15}/></button></div>
-   <div className="research-list">{runs.length?runs.map(r=><button key={r.id} className={'research-link '+(runId===r.id?'chosen':'')} onClick={()=>{setRunId(r.id);setView('overview');setSidebar(false);}}><span className={'research-dot '+r.status}/><span>{r.title}</span><small>{date(r.created)}</small></button>):<p className="sidebar-empty">Здесь появится история<br/>ваших исследований</p>}</div>
+   <div className="research-list">{runs.length?runs.map(r=><button key={r.id} className={'research-link '+(runId===r.id?'chosen':'')} onClick={()=>{selectResearch(r.id);setView('overview');setSidebar(false);}}><span className={'research-dot '+r.status}/><span>{r.title}</span><small>{date(r.created)}</small></button>):<p className="sidebar-empty">Здесь появится история<br/>ваших исследований</p>}</div>
    <div className="sidebar-bottom"><div className="principle"><ShieldCheck size={20}/><strong>Выводы, которым есть опора</strong><p>Источники, независимая проверка<br/>и прозрачная оценка.</p></div><button className={'nav-item '+(view==='settings'?'active':'')} onClick={()=>setView('settings')}><Settings2 size={18}/>Параметры конвейера</button>{identity&&!readOnly&&<button className="nav-item" onClick={()=>setAccountModal(true)}><Settings2 size={18}/><span>Настройки аккаунта</span></button>}{identity&&['owner','admin'].includes(identity.role)&&<button className={'nav-item '+(view==='model_settings'?'active':'')} onClick={()=>{setView('model_settings');setSidebar(false);}}><Settings2 size={18}/><span>Модели и промпты</span></button>}{identity&&['owner','admin'].includes(identity.role)&&<button className="nav-item" onClick={()=>setAdminModal(true)}><ShieldCheck size={18}/><span>Администрирование</span></button>}<div className="profile"><span className="avatar">{identity?.name.slice(0,1)||"И"}</span><div><strong>{identity?.name||'Исследователь'}</strong><span>{identity?(readOnly?'Гостевой доступ · просмотр':member?'Личное пространство':'Владелец демонстрации'):'Локальное пространство'}</span></div><span className="version">v0.1</span></div></div>
   </aside>
   <div className="main-shell">
@@ -95,7 +131,7 @@ export default function Page(){
     {view==='sources'&&<SourceLibrary key={run?.id||'empty'} sources={sources} models={models} title={run?.title} runId={run?.id} canWrite={!readOnly} manualSources={run?.settings.manual_sources||[]} onChanged={refresh}/>}
     {view==='agents'&&<AgentResults models={models} onOpen={id=>openCard(id,'agents')}/>}
     {view==='model_settings'&&identity&&['owner','admin'].includes(identity.role)&&<ModelSettings/>}
-    {view==='activity'&&<section className="results-panel" data-tour="research-activity"><div className="section-title"><div><h2>Журнал исследования</h2><p>События сохраняются независимо от состояния браузера · показано {events.length} из {eventLog.total}</p></div>{run&&<button className="button secondary compact" onClick={async()=>{try{setAudit(await api(`/runs/${run.id}/audit`));}catch(e){setToast((e as Error).message);}}}><GitBranch size={15}/>Проверить изоляцию</button>}</div>{eventLog.error&&<p className="form-error" role="alert">{eventLog.error}</p>}{audit&&<div className="audit-panel"><div className="audit-title"><ShieldCheck size={20}/><div><strong>Контексты агентов доступны для проверки</strong><p>Проверяющему передаются только компания, отдельные тезисы и независимо найденные источники.</p></div><button className="icon-button" aria-label="Закрыть аудит" onClick={()=>setAudit(null)}><X size={17}/></button></div>{audit.map(a=><details className="audit-item" key={a.id}><summary><span>{a.role}</span><span>{a.model} · {a.status} · {a.tokens} токенов</span><code>#{a.input_hash.slice(0,10)}</code></summary><pre>{JSON.stringify({prompt_version:a.prompt_version,connection_version:a.connection_version,prompt:a.prompt,input:a.input,output:a.output},null,2)}</pre></details>)}</div>}{events.length?<div className="timeline">{[...events].reverse().map(e=><div className={'timeline-event '+(e.stage==='error'?'event-error':'')} key={e.id}><span className="timeline-node">{e.stage==='error'?<X size={12}/>:e.stage==='completed'?<Check size={12}/>:<span/>}</span><time>{time(e.at)}</time><div><span className="event-stage">{stageLabels[e.stage]||e.stage}</span><p>{e.message}</p>{e.model_id&&<button className="text-button" onClick={()=>openCard(e.model_id!)}>{models.find(m=>m.id===e.model_id)?.name||e.model_id}<ArrowUpRight size={12}/></button>}</div></div>)}</div>:<div className="empty-state"><Activity size={30}/><h3>Пока нет событий</h3><p>Здесь будет виден каждый этап исследования.</p></div>}{eventLog.hasOlder&&<div className="event-log-pagination"><button className="button secondary compact" disabled={eventLog.loadingOlder} onClick={()=>void eventLog.loadOlder()}>{eventLog.loadingOlder?'Загружаем…':'Загрузить более ранние события'}</button></div>}</section>}
+    {view==='activity'&&<section className="results-panel" data-tour="research-activity"><div className="section-title"><div><h2>Журнал исследования</h2><p>События сохраняются независимо от состояния браузера · показано {events.length} из {eventLog.total}</p></div>{run&&<button className="button secondary compact" onClick={async()=>{try{const records=await api(`/runs/${run.id}/audit`);if(selectedRunId.current===run.id)setAuditResult({runId:run.id,records});}catch(e){setToast((e as Error).message);}}}><GitBranch size={15}/>Проверить изоляцию</button>}</div>{eventLog.error&&<p className="form-error" role="alert">{eventLog.error}</p>}{audit&&<div className="audit-panel"><div className="audit-title"><ShieldCheck size={20}/><div><strong>Контексты агентов доступны для проверки</strong><p>Проверяющему передаются только компания, отдельные тезисы и независимо найденные источники.</p></div><button className="icon-button" aria-label="Закрыть аудит" onClick={()=>setAuditResult(null)}><X size={17}/></button></div>{audit.map(a=><details className="audit-item" key={a.id}><summary><span>{a.role}</span><span>{a.model} · {a.status} · {a.tokens} токенов</span><code>#{a.input_hash.slice(0,10)}</code></summary><pre>{JSON.stringify({prompt_version:a.prompt_version,connection_version:a.connection_version,prompt:a.prompt,input:a.input,output:a.output},null,2)}</pre></details>)}</div>}{events.length?<div className="timeline">{[...events].reverse().map(e=><div className={'timeline-event '+(e.stage==='error'?'event-error':'')} key={e.id}><span className="timeline-node">{e.stage==='error'?<X size={12}/>:e.stage==='completed'?<Check size={12}/>:<span/>}</span><time>{time(e.at)}</time><div><span className="event-stage">{stageLabels[e.stage]||e.stage}</span><p>{e.message}</p>{e.model_id&&<button className="text-button" onClick={()=>openCard(e.model_id!)}>{models.find(m=>m.id===e.model_id)?.name||e.model_id}<ArrowUpRight size={12}/></button>}</div></div>)}</div>:<div className="empty-state"><Activity size={30}/><h3>Пока нет событий</h3><p>Здесь будет виден каждый этап исследования.</p></div>}{eventLog.hasOlder&&<div className="event-log-pagination"><button className="button secondary compact" disabled={eventLog.loadingOlder} onClick={()=>void eventLog.loadOlder()}>{eventLog.loadingOlder?'Загружаем…':'Загрузить более ранние события'}</button></div>}</section>}
     {view==='settings'&&<div className="settings-grid" data-tour="research-policy"><section className="results-panel"><div className="section-title"><div><h2>Что определяет приоритет</h2><p>Первая оплата за 90 дней · оценка по шкале 0–5</p></div><Scale size={22}/></div><div className="settings-content">{Object.entries(run?.policy.weights||health?.policy.weights||{}).map(([key,v])=>{const x=v as Json;return <div className="weight-row" key={key}><div><strong>{x.title}</strong><span>{Math.round(x.weight*100)}%</span></div><div className="weight-track"><div style={{width:`${x.weight*100}%`}}/></div></div>;})}<div className="note-box">Число /100 — экспертный индекс, а не вероятность успеха. Неизвестные оценки образуют диапазон. Веса фиксируются на старте исследования.</div><p className="config-path">Правила фиксируются при старте. Настройки моделей и лимитов доступны администраторам в разделе «Модели и промпты».</p></div></section><section className="results-panel"><div className="section-title"><div><h2>Обязательные условия</h2><p>Модель проходит, только если выполнены все</p></div><ShieldCheck size={22}/></div><div className="settings-content">{(run?.policy.criteria||health?.policy.criteria||[]).map((x:Json)=><div className="criterion" key={x.id}><CheckCircle2 size={18}/><span>{x.title}</span></div>)}<div className="note-box amber">Неизвестное условие отправляет модель на проверку. Юридическая оценка AI требует проверки специалистом перед реальным запуском.</div></div></section><section className="results-panel full-width"><div className="section-title"><div><h2>Подключения и лимиты</h2><p>Секреты доступны только серверу</p></div></div><div className="connection-grid"><div><span>Сервер моделей</span><strong>{health?.llm_model||'Проверяем…'}</strong><small>{health?.llm_configured?'Настройки прочитаны; доступ проверяется при запросе':'Требуется настройка'}</small></div><div><span>Хранилище</span><strong>{health?.database==='sqlite'?'Хранилище данных':'PostgreSQL'}</strong><small>Результаты и этапы сохраняются</small></div><div><span>Поиск</span><strong>{'Открытые страницы'}</strong><small>Поисковые фрагменты отмечаются отдельно</small></div><div><span>Бюджет исследования</span><strong>{health?.policy.limits.max_llm_calls||'—'} LLM-запросов</strong><small>Токены: {health?.policy.limits.max_total_tokens.toLocaleString('ru-RU')||'—'}</small></div></div></section></div>}
     <footer className="page-footer"><span>venturelens<span className="brand-period">.</span> <span className="footer-divider">/</span> Решения начинаются с доказательств</span><span><ShieldCheck size={13}/>Источники сохраняются · Выводы проверяются</span></footer>
    </main>
@@ -105,7 +141,7 @@ export default function Page(){
   <Onboarding open={helpOpen} onClose={closeHelp} identity={identity} onNotice={setToast} section={newModal?'new_research':compare?'compare':card?'card_'+cardTab:view}/>
    {accountModal&&<AccountSettings onClose={closeAccount}/>}
   {adminModal&&identity&&<AdminConsole identity={identity} onClose={closeAdmin}/>}
-  {newModal&&!readOnly&&<NewResearch onHelp={openHelp} initial={researchTemplate} onClose={closeNew} configured={!!health?.llm_configured} onCreated={id=>{setRunId(id);setNewModal(false);setView('overview');setToast('Исследование создано. Можно закрыть страницу — работа продолжится.');}}/>}
+  {newModal&&!readOnly&&<NewResearch onHelp={openHelp} initial={researchTemplate} onClose={closeNew} configured={!!health?.llm_configured} onCreated={id=>{selectResearch(id);setNewModal(false);setView('overview');setToast('Исследование создано. Можно закрыть страницу — работа продолжится.');}}/>}
   {current&&<CardModal onHelp={openHelp} tab={cardTab} onTabChange={setCardTab} readOnly={readOnly} currentUser={identity?.name||''} onChanged={refresh} model={current} policy={run?.policy||{}} onClose={closeCard} onDecision={saveDecision}/>}
   {compare&&<CompareModal onHelp={openHelp} models={models.filter(m=>selected.includes(m.id))} policy={run?.policy||{}} onClose={closeCompare}/>}
  </div>;

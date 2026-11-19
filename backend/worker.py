@@ -14,31 +14,44 @@ from .execution import Claim,current,assert_owner,Cancelled,DependencyUnavailabl
 from .settings import setting
 
 STATE={'tick':time.time(),'database':False,'active':0,'draining':False}
+ACTIVE_STATUSES=('queued','running','waiting')
 def lease_seconds():return float(setting('JOB_LEASE_SECONDS','120'))
 
+def reconcile_finished_run(session):
+    jobs=select(Job.id).where(Job.run_id==Run.id)
+    query=select(Run).where(Run.status.in_(ACTIVE_STATUSES),jobs.exists(),~jobs.where(Job.status.in_(ACTIVE_STATUSES)).exists()).order_by(Run.updated).limit(1)
+    if session.bind.dialect.name=='postgresql':query=query.with_for_update(skip_locked=True)
+    run=session.scalar(query)
+    if run is not None:finish_run(session,run)
+
 def claim_job(owner):
-    expired_run=None
     with Session.begin() as s:
-        query=select(Job).join(Run,Run.id==Job.run_id).where(Run.status.in_(['queued','running','waiting']),Job.next_retry_at<=time.time(),or_(Job.status.in_(['queued','waiting']),(Job.status=='running') & (Job.lease_until<time.time()))).order_by(Job.next_retry_at,Job.id).limit(1)
-        if s.bind.dialect.name=='postgresql':query=query.with_for_update(skip_locked=True,of=Job)
+        query=select(Job).join(Run,Run.id==Job.run_id).where(Run.status.in_(ACTIVE_STATUSES),Job.next_retry_at<=time.time(),or_(Job.status.in_(['queued','waiting']),(Job.status=='running') & (Job.lease_until<time.time()))).order_by(Job.next_retry_at,Job.id).limit(1)
+        # Cancellation, finalization, and claims acquire the run lock before writing jobs.
+        if s.bind.dialect.name=='postgresql':query=query.with_for_update(skip_locked=True,of=Run)
         job=s.scalar(query)
-        if not job:return None
+        if not job:
+            reconcile_finished_run(s)
+            return None
         run=s.get(Run,job.run_id)
+        if s.bind.dialect.name=='postgresql':
+            job=s.scalar(select(Job).where(Job.id==job.id).with_for_update(skip_locked=True).execution_options(populate_existing=True))
+            if job is None:return None
+        now=time.time()
+        if job.next_retry_at>now or not (job.status in ('queued','waiting') or job.status=='running' and job.lease_until<now):return None
         if job.attempts>=read(run.policy)['limits'].get('max_job_attempts',8):
             job.status='failed';job.last_error='Достигнут лимит попыток задания'
+            job.lease_until=0;job.lease_owner=None
             if job.model_id:
                 model=s.get(Model,job.model_id);model.status='error';model.error=job.last_error
-            expired_run=job.run_id
-        else:
-            token=uid();epoch=job.epoch+1
-            changed=s.execute(update(Job).where(Job.id==job.id,Job.epoch==job.epoch,or_(Job.status.in_(['queued','waiting']),(Job.status=='running') & (Job.lease_until<time.time()))).values(status='running',lease_owner=token,epoch=epoch,lease_until=time.time()+lease_seconds(),attempts=Job.attempts+1))
-            if not changed.rowcount:return None
-            claim=Claim(job.id,job.run_id,job.model_id,token,epoch,run.generation)
-    if expired_run:
-        finish_run(expired_run);return None
-    with Session.begin() as s:
-        s.execute(update(Run).where(Run.id==claim.run_id,Run.generation==claim.generation,Run.status.in_(['queued','waiting'])).values(status='running',waiting_reason=''))
-    return claim
+            finish_run(s,run)
+            return None
+        token=uid();epoch=job.epoch+1
+        changed=s.execute(update(Job).where(Job.id==job.id,Job.epoch==job.epoch,or_(Job.status.in_(['queued','waiting']),(Job.status=='running') & (Job.lease_until<now))).values(status='running',lease_owner=token,epoch=epoch,lease_until=now+lease_seconds(),attempts=Job.attempts+1))
+        if not changed.rowcount:return None
+        if run.status in ('queued','waiting'):
+            run.status='running';run.waiting_reason=''
+        return Claim(job.id,job.run_id,job.model_id,token,epoch,run.generation)
 
 def account(claim,renew=False):
     with claim.accounting_lock:
@@ -98,9 +111,9 @@ def execute(claim,owner=None):
             from .db import Event,dump
             if message:s.add(Event(run_id=claim.run_id,model_id=claim.model_id,stage='waiting' if retry else 'error',message=message,payload=dump({'retry_at':job.next_retry_at} if retry else {})))
             job.status=status;job.lease_until=0;job.lease_owner=None
+            finish_run(s,run)
     except (SQLAlchemyError,Cancelled):return
     finally:current.reset(context)
-    finish_run(claim.run_id)
 
 class Health(BaseHTTPRequestHandler):
     def do_GET(self):

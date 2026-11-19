@@ -58,15 +58,45 @@ def discover(run_id):
         if s.query(Model).filter_by(run_id=run_id).count():return
     market={'US':'United States','UK':'United Kingdom','EU':'European Union','Global':'international markets'}.get(config['region'],config.get('market',''))
     sources=config.get('discovery_sources',[])
-    if not sources:
+    needs_search=not sources
+    saved_urls=set(config.get('discovery_user_urls',[]))
+    processed_urls=set(saved_urls)
+    known_urls={item['url'] for item in sources}
+    manual_urls=[item['url'] for item in config.get('manual_sources',[]) if item.get('model_id') is None]
+    added_material=False
+    for url in dict.fromkeys([*config.get('source_urls',[]),*manual_urls]):
+        if url in processed_urls or url in known_urls:
+            continue
+        guard(run_id)
+        try:
+            source=fetch(url)
+        except (Cancelled,DependencyUnavailable):
+            raise
+        except Exception:
+            source_errors(run_id)('Добавленный источник недоступен или заблокирован проверкой URL',url)
+            continue
+        if not any(item['id']==source['id'] for item in sources):
+            sources.append(source)
+            added_material=True
+        processed_urls.add(url)
+
+    progress=config.get('selection_progress',{})
+    if added_material and not progress.get('candidates'):
+        progress={}
+    if processed_urls!=saved_urls:
+        # Persist manual material before trying the external search dependency.
+        with Session.begin() as s:
+            run=assert_owner(s,run_id);value=read(run.settings)
+            value.update(discovery_sources=sources,discovery_user_urls=sorted(processed_urls))
+            if not progress:value.pop('selection_progress',None)
+            run.settings=dump(value)
+    if needs_search:
         emit(run_id,'discovery','Ищем источники под выбранный рынок и направление',payload={'market':market_label(config),'sampling':config.get('sampling','legacy')})
-        for url in config.get('source_urls',[]):
-            try:sources.append(fetch(url))
-            except (Cancelled,DependencyUnavailable):raise
-            except Exception:source_errors(run_id)('Добавленный источник недоступен или заблокирован проверкой URL',url)
         try:
             sources.extend(collect([f"{config['focus']} {market} subscription companies examples",f"{market} B2B software business models {config['focus']}"],max_sources=6,on_error=source_errors(run_id)))
-        except (Cancelled,DependencyUnavailable):
+        except Cancelled:
+            raise
+        except DependencyUnavailable:
             if not sources:
                 # Known catalogues are examples only; selected market remains mandatory.
                 for url in pol.get('discovery_urls',[]):
@@ -84,7 +114,6 @@ def discover(run_id):
     profile=PROFILES.get(config.get('sampling','balanced'),PROFILES['balanced'])
     adaptive=config.get('adaptive_selection',False)
     rounds=profile['rounds'] if adaptive else 1
-    progress=config.get('selection_progress',{})
     candidates=progress.get('candidates',[]);completed=progress.get('round',0)
     seen={normalize(item.get('business_model_key') or item['name']).casefold() for item in candidates}
     valid_ids={item['id'] for item in sources}
@@ -284,21 +313,18 @@ def process_model(model_id):
     save_model(model_id,data,status='review' if provisional else 'passed',stage='completed',score=None if provisional else low,score_upper=None if provisional else high,coverage=coverage)
     emit(run_id,'completed',('Предварительная карточка с аудитом готова; условия допуска требуют проверки' if provisional else f'Карточка готова: индекс {low:g}/100, покрытие {coverage:g}%'),model_id)
 
-def finish_run(run_id):
-    with Session.begin() as s:
-        from sqlalchemy import select
-        query=select(Run).where(Run.id==run_id)
-        if s.bind.dialect.name=='postgresql':query=query.with_for_update()
-        r=s.scalar(query)
-        if not r or r.status=='cancelled':return
-        jobs=s.query(Job).filter_by(run_id=run_id).all()
-        if not jobs:return
-        active={j.status for j in jobs}
-        if 'running' in active:r.status='running'
-        elif 'queued' in active:r.status='queued'
-        elif 'waiting' in active:r.status='waiting'
-        else:
-            r.status='partial' if 'failed' in active else 'completed_with_gaps' if r.degraded else 'completed'
-            r.waiting_reason=''
-            if r.status!='partial':r.error=''
-        r.updated=time.time()
+def finish_run(session,run):
+    """Update the aggregate status inside the caller's locked run transaction."""
+    from sqlalchemy import select
+    if run.status=='cancelled':return
+    session.flush()
+    statuses=set(session.scalars(select(Job.status).where(Job.run_id==run.id)))
+    if not statuses:return
+    if 'running' in statuses:run.status='running'
+    elif 'queued' in statuses:run.status='queued'
+    elif 'waiting' in statuses:run.status='waiting'
+    else:
+        run.status='partial' if 'failed' in statuses else 'completed_with_gaps' if run.degraded else 'completed'
+        run.waiting_reason=''
+        if run.status!='partial':run.error=''
+    run.updated=time.time()

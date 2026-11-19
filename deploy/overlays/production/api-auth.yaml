@@ -1,0 +1,17 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api
+spec:
+  template:
+    spec:
+      containers:
+      - name: api
+        env:
+        - name: AUTH_CONTEXT_REQUIRED
+          value: 'true'
+        - name: AUTH_CONTEXT_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: venture-lens-auth
+              key: AUTH_CONTEXT_SECRET
