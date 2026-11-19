@@ -1,5 +1,6 @@
 {
   "verified_at": "2026-11-18T09:58:09.961337+00:00",
+  "scope": "public authenticated single-node VPS demo; autonomous corporate VPN; SSH for administration only",
   "server": {
     "ip": "91.108.213.165",
     "os": "Ubuntu 24.04",
@@ -30,7 +31,7 @@
     "snapshot_api_checks": 3
   },
   "checks": {
-    "real_corporate_llm_from_api_pod": true,
+    "real_model_server_from_api_pod": true,
     "searxng_real_query_results": 35,
     "api_recreation": {
       "passed": true,
@@ -44,7 +45,7 @@
       "self_heal": "SEARCH_REQUESTS_PER_MINUTE restored 19 -> 20 from Git"
     },
     "k3s_restart_helpers_and_app_recovered": true,
-    "corporate_llm_after_k3s_restart": true,
+    "model_server_after_k3s_restart": true,
     "argocd": {
       "sync": "Synced",
       "health": "Healthy",
@@ -121,8 +122,10 @@
     "latest real research: 1 admitted and 9 review; index is not calibrated probability",
     "GitHub Actions/GHCR prepared but not executed remotely",
     "scheduled off-host backups, alerts, OIDC and load tests pending",
-    "full worker fault suite verified previously on isolated local cluster; real VPS worker scaling 1 -> 2 -> 1 observed with autonomous research"
+    "full worker fault suite verified previously on isolated local cluster; real VPS worker scaling 1 -> 2 -> 1 observed with autonomous research",
+    "Model requests depend on provider availability and quotas."
   ],
   "current_specification_report": "platform/specification-verification.json",
+  "current_connection": {},
   "current_decision_workspace_report": "platform/decision-workspace-verification.json"
 }

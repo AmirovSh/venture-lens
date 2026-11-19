@@ -85,6 +85,7 @@
   },
   "constraints": [
     "one physical VPS, single TLS edge",
+    "Model requests depend on provider availability and quotas.",
     "GitHub Actions prepared but not run remotely",
     "scheduled external backups, monitoring and load tests pending",
     "registered_users limited to 200; registration 5 attempts per IP per hour; member 1 active and 3 new runs per rolling 24 hours",

@@ -12,7 +12,7 @@ metadata:
   name: corporate-llm
 spec:
   replicas: 1
-  # The personal VPN identity must not be connected by two replicas at once.
+  # Use a single active session for the configured VPN identity.
   strategy: {type: Recreate}
   selector: {matchLabels: {app: corporate-llm}}
   template:
@@ -34,9 +34,12 @@ spec:
         - --auth-nocache
         - --route-nopull
         - --route
-        - models.example.com
+        - $(MODEL_SERVER_HOST)
         - '255.255.255.255'
         - vpn_gateway
+        env:
+        - name: MODEL_SERVER_HOST
+          valueFrom: {secretKeyRef: {name: venture-lens-corporate-access, key: MODEL_SERVER_HOST}}
         securityContext:
           runAsUser: 0
           allowPrivilegeEscalation: false
@@ -104,4 +107,4 @@ spec:
       podSelector: {matchLabels: {k8s-app: kube-dns}}
     ports: [{protocol: UDP, port: 53}, {protocol: TCP, port: 53}]
   # Only the VPN transport leaves the pod. Direct HTTPS fallback is blocked.
-  - ports: [{protocol: UDP, port: 1198}]
+  - ports: [{protocol: UDP, port: 1194}]

@@ -33,9 +33,6 @@ images:
 - name: venture-lens-web
   newName: ghcr.io/amirovsh/venture-lens-web
   digest: sha256:5308d872e53bb57f5d900e371578683e43f345c620fbebcf41037ee282b61bd4
-- name: venture-lens-vpn-gateway
-  newName: venture-lens-vpn-gateway
-  newTag: vpn-51526eaa9d61e86e
 replicas:
 - name: api
   count: 1
@@ -48,5 +45,4 @@ replicas:
 components:
 - ../../components/search
 - ../../components/autoscaling
-- ../../components/workstation-tunnel
 - ../../components/public-demo

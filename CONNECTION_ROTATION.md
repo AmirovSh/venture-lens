@@ -30,4 +30,4 @@
 
 Миграция `0007_connection_rotation` добавляет версию подключения в аудит вызовов и индекс `(run_id, id)` для журнала. Существующие записи сохраняются; у старых вызовов версия подключения остаётся неизвестной (`null`).
 
-Проверка и развёртывание: [platform/reliability-fixes-verification.json](platform/reliability-fixes-verification.json), 121 PostgreSQL-тест без пропусков. Версия на VPS: `fix-revision-omitted`.
+Историческая проверка изменений: [отчёт](platform/reliability-fixes-verification.json), 121 PostgreSQL-тест без пропусков. Текущий релиз и его проверка описаны в [DELIVERY.md](DELIVERY.md).

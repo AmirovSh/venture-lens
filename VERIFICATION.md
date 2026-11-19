@@ -73,7 +73,7 @@
 - Next.js production build, TypeScript, инварианты репозитория, рендер Kustomize и оба GitHub workflow через actionlint прошли. Удалённый запуск GitHub Actions не выполнен.
 - В браузере проверены обзор, карточка, паспорта, риски, аудит, сравнение, план и настройки. Видео собрано из этих экранов: это монтаж, не непрерывная запись нового исследования.
 - Внешняя HTTPS-проверка: owner/demo, запрет неавторизованного API, права гостя, экспорт, отзыв сессии и её сохранение при перезапуске gateway. Регистрация и восстановление проверены отдельно: [platform/account-security-verification.json](platform/account-security-verification.json), [platform/public-verification.json](platform/public-verification.json).
-- Эксплуатационные испытания (восстановление pod, GitOps self-heal, KEDA, отказ VPN, backup/restore) описаны с границами в [SERVER.md](SERVER.md), [PLATFORM.md](PLATFORM.md) и `platform/*verification.json`. Последние снимки находятся на VPS; регулярная внешняя копия не настроена.
+- Эксплуатационные проверки восстановления pod, GitOps, KEDA и backup/restore описаны в [SERVER.md](SERVER.md) и [PLATFORM.md]. Регулярная внешняя копия пока не настроена.
 
 ## Материалы
 

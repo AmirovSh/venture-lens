@@ -1,14 +1,10 @@
-"""Temporary demo relay: pod network -> loopback SSH reverse forward.
-
-Corporate credentials and certificate remain on the Windows workstation.
-The caller's bridge token is passed through and verified by the Windows adapter.
-"""
+"""Forward requests to an upstream on the private host network."""
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from urllib.request import Request,build_opener,ProxyHandler
 from urllib.error import HTTPError,URLError
 import os
 
-UPSTREAM='http://127.0.0.1:18112'
+UPSTREAM=os.environ.get('MODEL_RELAY_UPSTREAM','http://127.0.0.1:18112')
 
 class Proxy(BaseHTTPRequestHandler):
     def reply(self,status,body,retry=None):
@@ -21,7 +17,7 @@ class Proxy(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if self.path not in ('/live','/ready'):self.send_error(404);return
-        # Confirms the tunnel reaches the Windows process; not an LLM inference.
+        # Readiness checks reachability of the upstream process.
         try:
             with build_opener(ProxyHandler({})).open(UPSTREAM+'/live',timeout=3) as response:
                 self.reply(response.status,response.read())
@@ -44,4 +40,7 @@ class Proxy(BaseHTTPRequestHandler):
             self.reply(503,b'{"error":"demo_tunnel_unavailable"}','10')
     def log_message(self,*_):pass
 
-if __name__=='__main__':ThreadingHTTPServer((os.environ.get('POD_GATEWAY','127.0.0.1'),18113),Proxy).serve_forever()
+if __name__=='__main__':
+    host = os.environ['POD_GATEWAY']
+    port = int(os.environ.get('MODEL_RELAY_PORT', '18113'))
+    ThreadingHTTPServer((host, port), Proxy).serve_forever()
